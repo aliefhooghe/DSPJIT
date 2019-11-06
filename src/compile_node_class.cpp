@@ -34,7 +34,7 @@ namespace ProcessGraph {
         _compile_done_msg_queue{3}
     {
         //  Default native function does nothing
-        _process_func = [](){return 0.0f;};
+        _process_func = default_process_func;
 
         //  Create the associated delete_sequence (without execution engine)
         _delete_sequences.emplace(_sequence, delete_sequence{});
@@ -83,23 +83,26 @@ namespace ProcessGraph {
 
         //  Check generated IR code
         raw_os_ostream stream{std::cout};
-        if (verifyFunction(*function, &stream))
-            LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code");
+        if (verifyFunction(*function, &stream)) {
+            LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation");
+            //  Do not compile to native code because malformed code could lead to crash
+        }
+        else {
+            /**
+             *      Compile LLVM IR to native code
+             **/
+            auto engine = jit_test::build_execution_engine(std::move(module));
+            raw_func native_func =
+                reinterpret_cast<raw_func>(engine->getPointerToFunction(function));
 
-        /**
-         *      Compile LLVM IR to native code
-         **/
-        auto engine = jit_test::build_execution_engine(std::move(module));
-        raw_func native_func =
-            reinterpret_cast<raw_func>(engine->getPointerToFunction(function));
-
-        /**
-         *      Notify process thread that a native function is ready
-         **/
-        _sequence++;
-        _compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func});
-        _delete_sequences.emplace(_sequence, delete_sequence{std::move(engine)});
-        LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
+            /**
+             *      Notify process thread that a native function is ready
+             **/
+            _sequence++;
+            _compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func});
+            _delete_sequences.emplace(_sequence, delete_sequence{std::move(engine)});
+            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
+        };
     }
 
     llvm::Value *graph_execution_context::compile_node_helper(

@@ -47,6 +47,8 @@ namespace ProcessGraph {
 
     class graph_execution_context {
 
+        static constexpr auto default_process_func = []() { return 0.0f; };
+
     public:
         friend class compile_node_class;
 

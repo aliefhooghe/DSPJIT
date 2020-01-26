@@ -65,7 +65,18 @@ namespace ProcessGraph {
     private:
 
         using raw_func = float (*)();
-        using mutable_node_state = std::vector<uint8_t>;
+
+        struct mutable_node_state {
+            explicit mutable_node_state(std::size_t size)
+            : data(size, 0u)
+            {}
+
+            mutable_node_state(mutable_node_state&) = delete;
+            mutable_node_state(mutable_node_state&&) = default;
+
+            float cycle_state{0.f};
+            std::vector<uint8_t> data{};
+        };
 
         class delete_sequence {
         public:

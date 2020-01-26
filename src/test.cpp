@@ -10,14 +10,10 @@
 using namespace llvm;
 using namespace ProcessGraph;
 
-void print_module(const llvm::Module& module)
-{
-    llvm::raw_os_ostream stream{std::cout};
-    module.print(stream, nullptr);
-}
 
 void test_last()
 {
+    std::cout << "TEST LAST COMPONENT (state)" << std::endl;
     graph_execution_context context;
 
     float input;
@@ -36,6 +32,33 @@ void test_last()
     for (auto i = 0; i < 10; ++i) {
         input = static_cast<float>(i);
         std::cout << "input : " << input << ", lp : " << graph_process(lp) << ", lc :" << context.process() << std::endl;
+    }
+}
+
+void test_cycle()
+{
+    std::cout << "TEST INTEGRATOR CIRCUIT (cycle state)" << std::endl;
+    graph_execution_context context;
+
+    float input = 0;
+
+    reference_compile_node inputc{context, input};
+    reference_process_node inputp{input};
+
+    add_compile_node integrator_c{context};
+    add_process_node<float> integrator_p{};
+
+    //  Use cyle to integrate
+    inputc.connect(integrator_c, 0);
+    integrator_c.connect(integrator_c, 1);
+
+    inputp.connect(integrator_p, 0);
+    integrator_p.connect(integrator_p, 1);
+
+    context.compile(integrator_c);
+    for (auto i = 0; i < 10; ++i) {
+        input = static_cast<float>(i);
+        std::cout << "input : " << input << ", lp : " << graph_process(integrator_p) << ", lc :" << context.process() << std::endl;
     }
 }
 
@@ -68,7 +91,7 @@ int main(int argc, char* argv[])
     //--------------------------------------------------------------
 
     // Execute
-    
+
     std::cout << "Set x = 10" << std::endl;
     x = 10;
 
@@ -76,17 +99,18 @@ int main(int argc, char* argv[])
     std::cout << "compiled version return " << context.process() << std::endl;
 
     std::cout << "link ref to add and recompile" << std::endl;
-    
+
     rp.connect(ap, 0u);
     rc.connect(ac, 0u);
 
     context.compile(ac);
-    
+
     std::cout << "dynamic version return " << graph_process(ap) << std::endl;
     std::cout << "compiled version return " << context.process() << std::endl;
 
 
     test_last();
+    test_cycle();
 
     return 0;
 }

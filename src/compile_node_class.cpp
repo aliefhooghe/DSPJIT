@@ -128,6 +128,35 @@ namespace ProcessGraph {
         const auto input_count = node.get_input_count();
         std::vector<llvm::Value*> input_values(input_count);
 
+        // Check if a state have been created for this node
+        auto state_it = _state.find(&node);
+        if (state_it == _state.end()) {
+            //  If not create state
+            auto ret = _state.emplace(&node, mutable_node_state(node.mutable_state_size));
+            assert(ret.second);
+            state_it = ret.first;
+        }
+
+        //
+        auto value_it = values.lower_bound(&node);
+
+        if (value_it != values.end() && !(values.key_comp()(&node, value_it->first))) {
+            //  This node have been visited : there is a cycle
+
+            if (value_it->second == nullptr) {
+                //  This cycle have not been discovered : create a value with cycle state
+                value_it->second =
+                    ir_helper::runtime::create_load(builder, &(state_it->second.cycle_state));
+            }
+
+            //  Return cycle_state value
+            return value_it->second;
+        }
+        else {
+            //  This node have not been visited, create a null output value
+            value_it = values.emplace_hint(value_it, &node, nullptr);
+        }
+
         //  Compile dependencies input
         for (auto i = 0u; i < input_count; ++i) {
             const auto *input = node.get_input(i);
@@ -137,32 +166,15 @@ namespace ProcessGraph {
                     llvm::ConstantFP::get(builder.getContext(), llvm::APFloat(0.0f));
             }
             else {
-                const auto value_it = values.find(input);
-
-                if (value_it != values.end()) {
-                    //  node have already been compiled
-                    input_values[i] = value_it->second;
-                }
-                else {
-                    input_values[i] = compile_node_helper(builder, *input, values);
-                }
+                input_values[i] = compile_node_helper(builder, *input, values);
             }
-        }
-
-        // Check if a state have been created for this node
-        auto state_it = _state.find(&node);
-        if (state_it == _state.end()) {
-            //  If not create state
-            auto ret = _state.emplace(&node, mutable_node_state(node.mutable_state_size, 0u));
-            assert(ret.second);
-            state_it = ret.first;
         }
 
         //  get state ptr
         llvm::Value *state_ptr =
             node.mutable_state_size == 0u ?
                 nullptr :
-                ir_helper::runtime::get_raw_pointer(builder, state_it->second.data());
+                ir_helper::runtime::get_raw_pointer(builder, state_it->second.data.data());
 
         // compile processing
         auto *value =
@@ -171,8 +183,12 @@ namespace ProcessGraph {
                 input_values,
                 state_ptr);
 
-        // record value
-        values[&node] = value;
+        //  emit instruction to store output into cycle_state if cycle_state value was created
+        if (value_it->second != nullptr)
+            ir_helper::runtime::create_store(builder, value, &(state_it->second.cycle_state));
+
+        // record output value
+        value_it->second = value;
 
         return value;
     }

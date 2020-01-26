@@ -52,7 +52,7 @@ namespace ir_helper {
         void create_store(llvm::IRBuilder<>& builder, llvm::Value *val, T *ptr)
         {
             llvm::Value *ptr_value = get_pointer<T>(builder, ptr);
-            builder.CreateStore(val, ptr);
+            builder.CreateStore(val, ptr_value);
         }
 
     }

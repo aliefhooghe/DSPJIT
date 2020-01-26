@@ -18,29 +18,26 @@ namespace ProcessGraph {
 
     class graph_execution_context;
 
+    //
     class compile_node_class : public node<compile_node_class> {
     public:
 
-        //  State
-        class state {
-        public:
-            virtual void* get_raw_ptr() { return nullptr; }
-        };
         compile_node_class(
                 graph_execution_context& context,
-                const unsigned int input_count);
+                const unsigned int input_count,
+                std::size_t mutable_state_size_bytes = 0u);
 
         virtual ~compile_node_class();
 
-        virtual std::unique_ptr<state> create_initial_state() const 
-        { 
-            return std::make_unique<state>();
-        };
+        virtual void emit_initialize_rw_state(
+                llvm::IRBuilder<>& builder, llvm::Value *mutable_state) {}
 
         virtual llvm::Value *compile(
                 llvm::IRBuilder<>& builder,
                 const std::vector<llvm::Value*>& input,
-                void *state_raw_ptr) const = 0;
+                llvm::Value *mutable_state) const = 0;
+
+        const std::size_t mutable_state_size;
     private:
         graph_execution_context& _context;
     };
@@ -59,7 +56,7 @@ namespace ProcessGraph {
          *   Compile Thread API
          **/
         void compile(compile_node_class& output_node);
-        
+
         /**
          *   Process Thread API
          **/
@@ -68,23 +65,23 @@ namespace ProcessGraph {
     private:
 
         using raw_func = float (*)();
-        using node_state = compile_node_class::state;
+        using mutable_node_state = std::vector<uint8_t>;
 
         class delete_sequence {
         public:
-            delete_sequence(std::unique_ptr<llvm::ExecutionEngine>&& engine)
+            explicit delete_sequence(std::unique_ptr<llvm::ExecutionEngine>&& engine)
             : _execution_engine{std::move(engine)}
             {}
 
             delete_sequence() = default;
             delete_sequence(delete_sequence&&) = default;
             delete_sequence(delete_sequence&) = delete;
-        
-            void add_deleted_node(std::unique_ptr<node_state> && state) { _node_states.emplace_back(std::move(state)); }
+
+            void add_deleted_node(mutable_node_state && state) { _node_states.emplace_back(std::move(state)); }
 
         private:
             std::unique_ptr<llvm::ExecutionEngine> _execution_engine;
-            std::vector<std::unique_ptr<node_state>> _node_states;
+            std::vector<mutable_node_state> _node_states;
         };
 
         /*  ack_msg are sent from process thread to compile thread */
@@ -117,10 +114,10 @@ namespace ProcessGraph {
         /* ack msg process*/
         void _process_ack_msg(const ack_msg msg);
 
-        std::map<const compile_node_class*, std::unique_ptr<compile_node_class::state>> _state;
+        std::map<const compile_node_class*, mutable_node_state> _state;
         std::map<compile_sequence_t, delete_sequence> _delete_sequences;
         compile_sequence_t _sequence;
-        
+
         /**
          *   Process Thread
          **/
@@ -131,7 +128,7 @@ namespace ProcessGraph {
         raw_func _process_func{};
 
         /**
-         *   Both Threads : Lock free inter thread comunication
+         *   Both Threads : Lock free inter thread comunication queues
          **/
         lock_free_queue<ack_msg> _ack_msg_queue;
         lock_free_queue<compile_done_msg> _compile_done_msg_queue;

@@ -3,12 +3,14 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/ADT/APFloat.h>
-#include <map>
+#include <llvm/Support/CommandLine.h>
 
+#include <map>
 #include <iostream>
 #include <algorithm>
 
 #include "jit_compiler.h"
+#include "ir_helper.h"
 #include "compile_node_class.h"
 #include "log.h"
 
@@ -16,9 +18,11 @@ namespace ProcessGraph {
 
     compile_node_class::compile_node_class(
             graph_execution_context& context,
-            const unsigned int input_count)
+            const unsigned int input_count,
+            std::size_t mutable_state_size_bytes)
     : node<compile_node_class>{input_count},
-            _context{context}
+            _context{context},
+            mutable_state_size{mutable_state_size_bytes}
     {}
 
     compile_node_class::~compile_node_class()
@@ -45,6 +49,12 @@ namespace ProcessGraph {
 
     }
 
+    static void print_module(const llvm::Module& module)
+    {
+        llvm::raw_os_ostream stream{std::cout};
+        module.print(stream, nullptr);
+    }
+
     llvm::Value *compile_node_value(
             llvm::IRBuilder<>& builder,
             const compile_node_class& node);
@@ -67,7 +77,6 @@ namespace ProcessGraph {
         /**
          *      Compile graph to LLVM IR
          **/
-
         IRBuilder builder(_llvm_context);
 
         // Create a function
@@ -81,17 +90,23 @@ namespace ProcessGraph {
         auto ret_val = compile_node_value(builder, output_node);
         builder.CreateRet(ret_val);
 
+#ifndef NDEBUG
+        print_module(*module);
+#endif
+
         //  Check generated IR code
         raw_os_ostream stream{std::cout};
         if (verifyFunction(*function, &stream)) {
             LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation");
             //  Do not compile to native code because malformed code could lead to crash
+            //  Stay at last process_func
         }
         else {
             /**
              *      Compile LLVM IR to native code
              **/
             auto engine = jit_test::build_execution_engine(std::move(module));
+
             raw_func native_func =
                 reinterpret_cast<raw_func>(engine->getPointerToFunction(function));
 
@@ -137,18 +152,24 @@ namespace ProcessGraph {
         // Check if a state have been created for this node
         auto state_it = _state.find(&node);
         if (state_it == _state.end()) {
-            auto ret = _state.emplace(&node, node.create_initial_state());
+            //  If not create state
+            auto ret = _state.emplace(&node, mutable_node_state(node.mutable_state_size, 0u));
             assert(ret.second);
             state_it = ret.first;
         }
+
+        //  get state ptr
+        llvm::Value *state_ptr =
+            node.mutable_state_size == 0u ?
+                nullptr :
+                ir_helper::runtime::get_raw_pointer(builder, state_it->second.data());
 
         // compile processing
         auto *value =
             node.compile(
                 builder,
                 input_values,
-                state_it->second->get_raw_ptr());
-
+                state_ptr);
 
         // record value
         values[&node] = value;

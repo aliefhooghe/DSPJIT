@@ -4,6 +4,8 @@
 #include "compile_node_class.h"
 #include "process_node.h"
 
+#include <math.h>
+
 namespace ProcessGraph {
 
     // Constant node
@@ -30,15 +32,15 @@ namespace ProcessGraph {
 
     public:
         explicit constant_compile_node(
-            graph_execution_context& context,const float value) 
+            graph_execution_context& context,const float value)
         :   compile_node_class(context, 0u),
             _value(value)
         {}
 
         llvm::Value *compile(
-            llvm::IRBuilder<>& builder, 
+            llvm::IRBuilder<>& builder,
             const std::vector<llvm::Value*>&,
-            void *) const override;
+            llvm::Value*) const override;
     private:
         const float _value;
     };
@@ -75,7 +77,7 @@ namespace ProcessGraph {
         llvm::Value *compile(
             llvm::IRBuilder<>& builder,
             const std::vector<llvm::Value*>&,
-            void*) const override;
+            llvm::Value*) const override;
 
     private:
         const float& _ref;
@@ -100,13 +102,13 @@ namespace ProcessGraph {
     class add_compile_node : public compile_node_class {
     public:
         add_compile_node(graph_execution_context& context) :
-            compile_node_class{context, 2} 
+            compile_node_class{context, 2}
         {}
 
         llvm::Value *compile(
-            llvm::IRBuilder<>& builder, 
+            llvm::IRBuilder<>& builder,
             const std::vector<llvm::Value*>& input,
-            void*) const override;
+            llvm::Value*) const override;
     };
 
     // Mull
@@ -127,14 +129,14 @@ namespace ProcessGraph {
 
     class mul_compile_node : public compile_node_class {
     public:
-        mul_compile_node(graph_execution_context& context) 
+        mul_compile_node(graph_execution_context& context)
         :   compile_node_class{context, 2}
         {}
 
         llvm::Value *compile(
             llvm::IRBuilder<>& builder,
             const std::vector<llvm::Value*>& input,
-            void*) const override;
+            llvm::Value*) const override;
     };
 
     // Z^-1
@@ -145,7 +147,7 @@ namespace ProcessGraph {
     public:
         last_process_node(const T& initial_value) :
             process_node<T>(1),
-            _last{initial_value} 
+            _last{initial_value}
         {}
 
     protected:
@@ -161,43 +163,57 @@ namespace ProcessGraph {
     };
 
     class last_compile_node : public compile_node_class {
-    
-        class last_state : public compile_node_class::state {
-        public:
-            explicit last_state(const float initial_value)
-            :   _state {initial_value} 
-            {}
-
-            void *get_raw_ptr() override
-            {
-                return &_state;
-            }
-
-        private:
-            float _state;
-        };
 
     public:
         last_compile_node(
             graph_execution_context& context,
             const float initial_value)
-        :   compile_node_class{context, 1},
-            _initial_value{initial_value} 
+        :   compile_node_class{context, 1, sizeof(float)},
+            _initial_value{initial_value}
         {}
-
-        std::unique_ptr<compile_node_class::state> create_initial_state() const override
-        {
-            return std::make_unique<last_state>(_initial_value);
-        }
 
         llvm::Value *compile(
             llvm::IRBuilder<>& builder,
             const std::vector<llvm::Value*>& input,
-            void *state_raw_ptr) const override;
+            llvm::Value* state) const override;
 
     private:
         const float _initial_value;
     };
+
+    // unary function node (only function, no lambda or callablo object because for compile node we need a symbol)
+
+    template <float unary(float)>
+    class unary_function_process_node : public process_node<float> {
+
+    protected:
+        void do_process(const std::vector<float>& input) override
+        {
+            process_node<float>::output = unary(input[0]);
+        }
+    };
+
+    template <float unary(float)>
+    class unary_function_compile_node : public compile_node_class {
+    public:
+        unary_function_compile_node(graph_execution_context& context)
+        : compile_node_class{context, 1}
+        {}
+
+        llvm::Value *compile(
+            llvm::IRBuilder<>& builder,
+            const std::vector<llvm::Value*>& input,
+            void*) const override
+        {
+            // TODO
+
+            auto& context = builder.getContext();
+
+            return nullptr;
+        }
+    };
+
+
 }
 
 #endif

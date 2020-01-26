@@ -11,7 +11,7 @@ namespace ProcessGraph {
 
     // Constant
     llvm::Value *constant_compile_node::compile(
-            llvm::IRBuilder<>& builder, const std::vector<llvm::Value*>&, void*) const
+            llvm::IRBuilder<>& builder, const std::vector<llvm::Value*>&, llvm::Value*) const
     {
         using namespace llvm;
         return ConstantFP::get(builder.getContext(), APFloat(_value));
@@ -19,21 +19,14 @@ namespace ProcessGraph {
 
     // Reference
     llvm::Value *reference_compile_node::compile(
-            llvm::IRBuilder<>& builder, const std::vector<llvm::Value*>&, void*) const
+            llvm::IRBuilder<>& builder, const std::vector<llvm::Value*>&, llvm::Value*) const
     {
-        using namespace llvm;
-        auto& context = builder.getContext();
-        auto *pointer_as_integer =
-                ConstantInt::get(context, APInt(64, reinterpret_cast<uint64_t>(&_ref)));
-
-        auto *pointer = builder.CreateIntToPtr(pointer_as_integer, PointerType::getUnqual(Type::getFloatTy(context)));
-
-        return builder.CreateLoad(Type::getFloatTy(context), pointer);
+        return ir_helper::runtime::create_load(builder, &_ref);
     }
 
     // Add
     llvm::Value *add_compile_node::compile(
-            llvm::IRBuilder<>& builder, const std::vector<llvm::Value *> &input, void*) const
+            llvm::IRBuilder<>& builder, const std::vector<llvm::Value *> &input, llvm::Value*) const
     {
         using namespace llvm;
         return builder.CreateFAdd(input[0], input[1]);
@@ -41,29 +34,28 @@ namespace ProcessGraph {
 
     // Mul
     llvm::Value *mul_compile_node::compile(
-            llvm::IRBuilder<>& builder, const std::vector<llvm::Value *> &input, void*) const
+            llvm::IRBuilder<>& builder, const std::vector<llvm::Value *> &input, llvm::Value*) const
     {
         using namespace llvm;
         return builder.CreateFMul(input[0], input[1]);
     }
 
     // Last
-
     llvm::Value *last_compile_node::compile(
-        llvm::IRBuilder<> &builder, const std::vector<llvm::Value *> &input, void* state_raw_ptr) const
+        llvm::IRBuilder<> &builder, const std::vector<llvm::Value *> &input, llvm::Value* state) const
     {
         using namespace llvm;
+        using namespace ir_helper::runtime;
 
         //  Get pointer to state (= float instance)
-        float *state = reinterpret_cast<float*>(state_raw_ptr);
-        Value *ir_state_ptr = ir_helper::get_pointer(builder, state);
-        
-        //  output <- State :   Load
+        Value *ir_state_ptr = raw2typed_ptr<float>(builder, state);
+
+        //  output <- State :   Load State
         Value *output = builder.CreateLoad(ir_state_ptr);
-        
-        //  state <- input  :   Store
-        builder.CreateStore(input[0], ir_state_ptr);        
-        
+
+        //  state <- input  :   Store State
+        builder.CreateStore(input[0], ir_state_ptr);
+
         return output;
     }
 }

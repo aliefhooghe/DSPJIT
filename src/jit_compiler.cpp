@@ -11,7 +11,8 @@
 
 namespace jit_test {
 
-    std::unique_ptr<llvm::ExecutionEngine> build_execution_engine(std::unique_ptr<llvm::Module> && module)
+    std::unique_ptr<llvm::ExecutionEngine> build_execution_engine(
+        std::unique_ptr<llvm::Module> && module, const llvm::TargetOptions options)
     {
         static auto llvm_native_was_init = false;
         if (llvm_native_was_init == false) {
@@ -20,18 +21,20 @@ namespace jit_test {
             llvm_native_was_init = true;
         }
 
-        auto module_ptr = module.get();
-        llvm::EngineBuilder factory(std::move(module));
         auto memory_mgr = std::unique_ptr<llvm::RTDyldMemoryManager>(new llvm::SectionMemoryManager());
 
-        factory.setEngineKind(llvm::EngineKind::JIT);
-        factory.setTargetOptions(llvm::TargetOptions{});
-        factory.setMCJITMemoryManager(std::move(memory_mgr));
+        auto execution_engine =
+            std::unique_ptr<llvm::ExecutionEngine>(
+                llvm::EngineBuilder{std::move(module)}
+                .setEngineKind(llvm::EngineKind::JIT)
+                .setTargetOptions(options)
+                .setMCJITMemoryManager(std::move(memory_mgr))
+                .create());
 
-        auto raw_ptr = factory.create();
-        auto execution_engine = std::unique_ptr<llvm::ExecutionEngine>(raw_ptr);
+        //execution_engine->RegisterJITEventListener()
 
         execution_engine->finalizeObject();
+
         return execution_engine;
     }
 

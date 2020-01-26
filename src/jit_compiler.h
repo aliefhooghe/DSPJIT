@@ -8,7 +8,8 @@
 
 namespace jit_test {
 
-    std::unique_ptr<llvm::ExecutionEngine> build_execution_engine(std::unique_ptr<llvm::Module> && module);
+    std::unique_ptr<llvm::ExecutionEngine> build_execution_engine(
+        std::unique_ptr<llvm::Module> && module, const llvm::TargetOptions options = {});
 
 }
 

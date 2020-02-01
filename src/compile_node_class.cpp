@@ -32,8 +32,9 @@ namespace ProcessGraph {
 
     //---
 
-    graph_execution_context::graph_execution_context()
+    graph_execution_context::graph_execution_context(std::size_t instance_count)
     :   _sequence{0u},
+        _instance_count{instance_count},
         _ack_msg_queue{3},
         _compile_done_msg_queue{3}
     {
@@ -80,14 +81,19 @@ namespace ProcessGraph {
         IRBuilder builder(_llvm_context);
 
         // Create a function
-        auto func_type = FunctionType::get(Type::getFloatTy(_llvm_context), false);
+        std::vector<llvm::Type*> arg_types{Type::getInt64Ty(_llvm_context)};
+        auto func_type = FunctionType::get(Type::getFloatTy(_llvm_context), arg_types, false /* is_var_arg */);
         auto function = Function::Create(func_type, Function::ExternalLinkage, "", module.get());
 
         BasicBlock *basic_block = BasicBlock::Create(_llvm_context, "", function);
         builder.SetInsertPoint(basic_block);
 
+        //  Get argument
+        auto instance_num_value = function->arg_begin();
+
         // Compile return value
-        auto ret_val = compile_node_value(builder, output_node);
+        auto ret_val = compile_node_value(
+            builder, output_node, instance_num_value);
         builder.CreateRet(ret_val);
 
 #ifndef NDEBUG
@@ -131,6 +137,7 @@ namespace ProcessGraph {
     llvm::Value *graph_execution_context::compile_node_helper(
             llvm::IRBuilder<>& builder,
             const compile_node_class& node,
+            llvm::Value *instance_num_value,
             std::map<const compile_node_class*, llvm::Value*>& values)
     {
         const auto input_count = node.get_input_count();
@@ -140,7 +147,7 @@ namespace ProcessGraph {
         auto state_it = _state.find(&node);
         if (state_it == _state.end()) {
             //  If not create state
-            auto ret = _state.emplace(&node, mutable_node_state(node.mutable_state_size));
+            auto ret = _state.emplace(&node, mutable_node_state(node.mutable_state_size, _instance_count));
             assert(ret.second);
             state_it = ret.first;
         }
@@ -153,8 +160,16 @@ namespace ProcessGraph {
 
             if (value_it->second == nullptr) {
                 //  This cycle have not been discovered : create a value with cycle state
+
+                auto cycle_ptr_value =
+                    create_array_ptr(
+                        builder,
+                        ir_helper::runtime::get_raw_pointer(builder, state_it->second.cycle_state.data()),
+                        instance_num_value,
+                        sizeof(float));
+
                 value_it->second =
-                    ir_helper::runtime::create_load(builder, &(state_it->second.cycle_state));
+                    builder.CreateLoad(ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
             }
 
             //  Return cycle_state value
@@ -174,15 +189,22 @@ namespace ProcessGraph {
                     llvm::ConstantFP::get(builder.getContext(), llvm::APFloat(0.0f));
             }
             else {
-                input_values[i] = compile_node_helper(builder, *input, values);
+                input_values[i] = compile_node_helper(builder, *input, instance_num_value, values);
             }
         }
 
         //  get state ptr
-        llvm::Value *state_ptr =
-            node.mutable_state_size == 0u ?
-                nullptr :
-                ir_helper::runtime::get_raw_pointer(builder, state_it->second.data.data());
+        llvm::Value *state_ptr = nullptr;
+
+        if (node.mutable_state_size != 0u) {
+            // state_ptr <- base + instance_num * state size
+            state_ptr =
+                create_array_ptr(
+                    builder,
+                    ir_helper::runtime::get_raw_pointer(builder, state_it->second.data.data()),
+                    instance_num_value,
+                    node.mutable_state_size);
+        }
 
         // compile processing
         auto *value =
@@ -192,8 +214,17 @@ namespace ProcessGraph {
                 state_ptr);
 
         //  emit instruction to store output into cycle_state if cycle_state value was created
-        if (value_it->second != nullptr)
-            ir_helper::runtime::create_store(builder, value, &(state_it->second.cycle_state));
+        if (value_it->second != nullptr) {
+            auto cycle_ptr_value =
+                    create_array_ptr(
+                        builder,
+                        ir_helper::runtime::get_raw_pointer(builder, state_it->second.cycle_state.data()),
+                        instance_num_value,
+                        sizeof(float));
+
+            builder.CreateStore(
+                value, ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
+        }
 
         // record output value
         value_it->second = value;
@@ -203,10 +234,24 @@ namespace ProcessGraph {
 
     llvm::Value *graph_execution_context::compile_node_value(
             llvm::IRBuilder<>& builder,
-            const compile_node_class& node)
+            const compile_node_class& node,
+            llvm::Value *instance_num_value)
     {
         std::map<const compile_node_class*, llvm::Value*> values;
-        return compile_node_helper(builder, node, values);
+        return compile_node_helper(builder, node, instance_num_value, values);
+    }
+
+    llvm::Value *graph_execution_context::create_array_ptr(
+            llvm::IRBuilder<>& builder,
+            llvm::Value *base,
+            llvm::Value *index,
+            std::size_t block_size)
+    {
+        return builder.CreateAdd(
+                    base,
+                    builder.CreateMul(
+                        index,
+                        llvm::ConstantInt::get(_llvm_context,llvm::APInt(64, block_size))));
     }
 
     void graph_execution_context::notify_delete_node(compile_node_class *node)
@@ -226,7 +271,7 @@ namespace ProcessGraph {
         }
     }
 
-    float graph_execution_context::process()
+    float graph_execution_context::process(std::size_t instance_num)
     {
         compile_done_msg msg;
 
@@ -234,7 +279,7 @@ namespace ProcessGraph {
         if (_compile_done_msg_queue.dequeue(msg))
             _process_compile_done_msg(msg);
 
-        return _process_func();
+        return _process_func(instance_num);
     }
 
 

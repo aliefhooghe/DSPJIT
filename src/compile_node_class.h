@@ -44,12 +44,12 @@ namespace ProcessGraph {
 
     class graph_execution_context {
 
-        static constexpr auto default_process_func = []() { return 0.0f; };
+        static constexpr auto default_process_func = [](std::size_t) { return 0.0f; };
 
     public:
         friend class compile_node_class;
 
-        graph_execution_context();
+        graph_execution_context(std::size_t instance_num = 1u);
         ~graph_execution_context();
 
         /**
@@ -60,22 +60,24 @@ namespace ProcessGraph {
         /**
          *   Process Thread API
          **/
-        float process();
+        float process(std::size_t instance_num = 0u);
 
     private:
-
-        using raw_func = float (*)();
+        using raw_func = float (*)(std::size_t);
 
         struct mutable_node_state {
-            explicit mutable_node_state(std::size_t size)
-            : data(size, 0u)
+            explicit mutable_node_state(std::size_t state_size, std::size_t instance_count)
+            :   cycle_state(instance_count, 0.f),
+                data(state_size * instance_count, 0u),
+                size{size}
             {}
 
             mutable_node_state(mutable_node_state&) = delete;
             mutable_node_state(mutable_node_state&&) = default;
 
-            float cycle_state{0.f};
+            std::vector<float> cycle_state;
             std::vector<uint8_t> data{};
+            std::size_t size;
         };
 
         class delete_sequence {
@@ -112,11 +114,19 @@ namespace ProcessGraph {
         llvm::Value *compile_node_helper(
             llvm::IRBuilder<>& builder,
             const compile_node_class& node,
+            llvm::Value *instance_num_value,
             std::map<const compile_node_class*, llvm::Value*>& values);
 
         llvm::Value *compile_node_value(
             llvm::IRBuilder<>& builder,
-            const compile_node_class& node);
+            const compile_node_class& node,
+            llvm::Value *instance_num_value);
+
+        llvm::Value *create_array_ptr(
+            llvm::IRBuilder<>& builder,
+            llvm::Value *base,
+            llvm::Value *index,
+            std::size_t block_size);
 
         /* Nodes callbacks */
         void notify_delete_node(compile_node_class*);
@@ -128,6 +138,7 @@ namespace ProcessGraph {
         std::map<const compile_node_class*, mutable_node_state> _state;
         std::map<compile_sequence_t, delete_sequence> _delete_sequences;
         compile_sequence_t _sequence;
+        std::size_t _instance_count;
 
         /**
          *   Process Thread

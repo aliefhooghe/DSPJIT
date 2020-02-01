@@ -141,5 +141,40 @@ static void affine_dyn(benchmark::State& state)
 }
 BENCHMARK(affine_dyn);
 
+/*
+ *
+ *      Integrator
+ *
+ */
+
+static void integrator_jit(benchmark::State& state)
+{
+    graph_execution_context context;
+    constant_compile_node incr{context, 1.f};
+    add_compile_node add{context};
+
+    incr.connect(add, 0);
+    add.connect(add, 1);
+
+    context.compile(add);
+
+    for (auto _ : state)
+        benchmark::DoNotOptimize(context.process());
+}
+BENCHMARK(integrator_jit);
+
+static void integrator_dyn(benchmark::State& state)
+{
+    constant_process_node incr{1.f};
+    add_process_node<float> add{};
+
+    incr.connect(add, 0);
+    add.connect(add, 1);
+
+    for (auto _ : state)
+        benchmark::DoNotOptimize(graph_process(add));
+}
+BENCHMARK(integrator_dyn);
+
 // MAIN
 BENCHMARK_MAIN();

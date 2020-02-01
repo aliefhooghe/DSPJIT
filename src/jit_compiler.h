@@ -8,6 +8,8 @@
 
 namespace jit_test {
 
+    void run_optimization(llvm::Module& m, llvm::Function& func);
+
     std::unique_ptr<llvm::ExecutionEngine> build_execution_engine(
         std::unique_ptr<llvm::Module> && module, const llvm::TargetOptions options = {});
 

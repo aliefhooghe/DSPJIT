@@ -146,28 +146,6 @@ namespace ProcessGraph {
     };
 
 
-    //
-
-
-    // class input_compile_node : public compile_node_class {
-
-    // public:
-    //     input_compile_node(const std::size_t size = 0u) :
-    //         compile_node_class(0u),
-    //         _size{size}
-    //     {}
-
-    //     ~input_compile_node() override {}
-
-    //     llvm::Value *compile(llvm::IRBuilder<>& builder, const std::vector<llvm::Value*>&/*input*/) const override
-    //     {
-    //         auto* table = builder.GetInsertBlock()->getValueSymbolTable();
-    //         return table->lookup("input");
-    //     }
-    // private:
-    //     const std::size_t _size;
-    // };
-
 }
 
 #endif //JITTEST_COMPILE_NODE_CLASS_H

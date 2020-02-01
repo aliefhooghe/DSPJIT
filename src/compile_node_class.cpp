@@ -91,6 +91,7 @@ namespace ProcessGraph {
         builder.CreateRet(ret_val);
 
 #ifndef NDEBUG
+        LOG_INFO("[graph_execution_context][compile thread] IR code before optimization");
         print_module(*module);
 #endif
 
@@ -105,6 +106,13 @@ namespace ProcessGraph {
             /**
              *      Compile LLVM IR to native code
              **/
+            jit_test::run_optimization(*module, *function);
+
+#ifndef NDEBUG
+            LOG_INFO("[graph_execution_context][compile thread] IR code after optimization");
+            print_module(*module);
+#endif
+
             auto engine = jit_test::build_execution_engine(std::move(module));
 
             raw_func native_func =

@@ -11,12 +11,13 @@ message (STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message (STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 # Google benchmark
-add_subdirectory("../3rdparty/benchmark" benchmark EXCLUDE_FROM_ALL)
+find_package(benchmark REQUIRED)
+message (STATUS "Found Google benchmark in ${benchmark_DIR}")
+
 
 ###----------###
 ### Targets  ###
 ###----------###
-
 
 ## _______________
 ## LLVM Setup Test

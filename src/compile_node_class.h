@@ -13,6 +13,7 @@
 
 #include "node.h"
 #include "lock_free_queue.h"
+#include "object_dumper.h"
 
 namespace ProcessGraph {
 
@@ -55,7 +56,8 @@ namespace ProcessGraph {
         /**
          *   Compile Thread API
          **/
-        void compile(compile_node_class& output_node);
+        void compile(compile_node_class& output_node, llvm::JITEventListener *listener = nullptr);
+        void compile_and_dump_to_file(compile_node_class& output_node, const std::string& filename);
 
         /**
          *   Process Thread API

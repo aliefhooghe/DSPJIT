@@ -62,6 +62,42 @@ void test_cycle()
     }
 }
 
+void dump_ref_node()
+{
+    std::cout << "DUMP REF NODE" << std::endl;
+    graph_execution_context context;
+
+    float input = 0;
+
+    reference_compile_node inputc{context, input};
+    context.compile_and_dump_to_file(inputc, "ref_node.bin");
+}
+
+void dump_affine()
+{
+    std::cout << "DUMP AFFINE" << std::endl;
+
+    float x = 42;
+    graph_execution_context context;
+
+    constant_compile_node node1{context, 0.1f};
+    reference_compile_node node2{context, x};
+    constant_compile_node node3{context, 5.0f};
+
+    add_compile_node add_node{context};
+    mul_compile_node mul_node{context};
+
+    node1.connect(mul_node, 0);
+
+    node1.connect(mul_node, 0);
+    node2.connect(mul_node, 1);
+
+    mul_node.connect(add_node, 0);
+    node3.connect(add_node, 1);
+
+    context.compile_and_dump_to_file(node3, "affine.bin");
+}
+
 int main(int argc, char* argv[])
 {
     float x;
@@ -111,6 +147,7 @@ int main(int argc, char* argv[])
 
     test_last();
     test_cycle();
+    dump_ref_node();
 
     return 0;
 }

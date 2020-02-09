@@ -60,7 +60,7 @@ namespace ProcessGraph {
             llvm::IRBuilder<>& builder,
             const compile_node_class& node);
 
-    void graph_execution_context::compile(compile_node_class& output_node)
+    void graph_execution_context::compile(compile_node_class& output_node, llvm::JITEventListener *listener)
     {
         using namespace llvm;
 
@@ -119,7 +119,7 @@ namespace ProcessGraph {
             print_module(*module);
 #endif
 
-            auto engine = jit_test::build_execution_engine(std::move(module));
+            auto engine = jit_test::build_execution_engine(std::move(module), listener);
 
             raw_func native_func =
                 reinterpret_cast<raw_func>(engine->getPointerToFunction(function));
@@ -132,6 +132,12 @@ namespace ProcessGraph {
             _delete_sequences.emplace(_sequence, delete_sequence{std::move(engine)});
             LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
         };
+    }
+
+    void graph_execution_context::compile_and_dump_to_file(compile_node_class& output_node, const std::string& filename)
+    {
+        object_dumper dumper{filename};
+        compile(output_node, &dumper);
     }
 
     llvm::Value *graph_execution_context::compile_node_helper(

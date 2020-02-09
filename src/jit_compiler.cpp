@@ -6,7 +6,6 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 
@@ -29,8 +28,11 @@ namespace jit_test {
         pm.doFinalization();
     }
 
+
     std::unique_ptr<llvm::ExecutionEngine> build_execution_engine(
-        std::unique_ptr<llvm::Module> && module, const llvm::TargetOptions options)
+        std::unique_ptr<llvm::Module> && module,
+        llvm::JITEventListener *listener,
+        const llvm::TargetOptions options)
     {
         static auto llvm_native_was_init = false;
         if (llvm_native_was_init == false) {
@@ -47,11 +49,16 @@ namespace jit_test {
                 .setEngineKind(llvm::EngineKind::JIT)
                 .setTargetOptions(options)
                 .setMCJITMemoryManager(std::move(memory_mgr))
+                //.setUseOrcMCJITReplacement()
                 .create());
 
-        //execution_engine->RegisterJITEventListener()
+        if (listener)
+            execution_engine->RegisterJITEventListener(listener);
 
         execution_engine->finalizeObject();
+
+        if (listener)
+           execution_engine->UnregisterJITEventListener(listener);
 
         return execution_engine;
     }

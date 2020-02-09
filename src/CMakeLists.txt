@@ -41,6 +41,8 @@ set(SRC
     lock_free_queue.h
     log.h
     node.h
+    object_dumper.h
+    object_dumper.cpp
     process_node.h
     test_implentations.cpp
     test_implentations.h)

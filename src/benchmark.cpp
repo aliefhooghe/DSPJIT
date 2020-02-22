@@ -15,17 +15,18 @@ using namespace llvm;
  *      Dereference a single pointer
  *
  */
-
 static void deref_pointer_jit(benchmark::State& state)
 {
     float x = 42;
     graph_execution_context context;
     reference_compile_node node{context, x};
+    compile_node_class out{context, 1u};
 
-    context.compile(node);
+    context.compile({}, {out});
 
     for (auto _ : state) {
-        benchmark::DoNotOptimize(context.process());
+        float f;
+        context.process(nullptr, &f);
     }
 }
 BENCHMARK(deref_pointer_jit);
@@ -34,109 +35,113 @@ static void deref_pointer_dyn(benchmark::State& state)
 {
     float x = 42;
     reference_process_node<float> node{x};
+    process_node<float> out{1u};
+
+    node.connect(out, 0u);
 
     for (auto _ : state) {
-        benchmark::DoNotOptimize(graph_process(node));
+        float f;
+        graph_process<float>({}, {node}, nullptr, &f);
     }
 }
 BENCHMARK(deref_pointer_dyn);
 
 /*
  *
- *      Add 1 to a value referenced by a pointer
+ *      Add to value
  *
  */
 
 static void add1_jit(benchmark::State& state)
 {
-    float x = 42;
     graph_execution_context context;
 
-    reference_compile_node node1{context, x};
-    constant_compile_node node2{context, 1.0f};
-    add_compile_node node3{context};
+    compile_node_class in1{context, 0u}, in2{context, 0u};
+    add_compile_node add{context};
+    compile_node_class out{context, 1u};
 
-    node1.connect(node3, 0);
-    node2.connect(node3, 1);
+    in1.connect(add, 0);
+    in2.connect(add, 1);
+    add.connect(out, 0u);
 
-    context.compile(node3);
+    context.compile({in1, in2}, {out});
 
+    float input[2] = {41.0f, 1.0f};
+    float output;
     for (auto _ : state) {
-        benchmark::DoNotOptimize(x = context.process());
+        context.process(input, &output);
     }
 }
 BENCHMARK(add1_jit);
 
 static void add1_dyn(benchmark::State& state)
 {
-    float x = 42;
-    reference_process_node<float> node1{x};
-    constant_process_node<float> node2{1.0f};
-    add_process_node<float> node3;
+    process_node<float> in1{0u}, in2{0u};
+    add_process_node<float> add;
+    process_node<float> out{1u};
 
-    node1.connect(node3, 0);
-    node2.connect(node3, 1);
+    in1.connect(add, 0);
+    in2.connect(add, 1);
+    add.connect(out, 0u);
 
+    float input[2] = {41.0f, 1.0f};
+    float output;
     for (auto _ : state) {
-        benchmark::DoNotOptimize(x = graph_process(node3));
+        graph_process({in1, in2}, {out}, input, &output);
     }
 }
 BENCHMARK(add1_dyn);
 
 /*
  *
- *      Compute x <- 0.1 * x + 5.0
+ *      Compute x <- in1 * in2 + in3
  *
  */
 
 static void affine_jit(benchmark::State& state)
 {
-    float x = 42;
     graph_execution_context context;
 
-    constant_compile_node node1{context, 0.1f};
-    reference_compile_node node2{context, x};
-    constant_compile_node node3{context, 5.0f};
+    compile_node_class in1{context, 0u}, in2{context, 0u}, in3{context, 0u};
+    add_compile_node add{context};
+    mul_compile_node mul{context};
+    compile_node_class out{context, 1u};
 
-    add_compile_node add_node{context};
-    mul_compile_node mul_node{context};
+    in1.connect(mul, 0u);
+    in2.connect(mul, 1u);
+    mul.connect(add, 0u);
+    in3.connect(add, 1u);
+    add.connect(out, 0u);
 
-    node1.connect(mul_node, 0);
+    context.compile({in1, in2, in3}, {out});
 
-    node1.connect(mul_node, 0);
-    node2.connect(mul_node, 1);
-
-    mul_node.connect(add_node, 0);
-    node3.connect(add_node, 1);
-
-    context.compile(add_node);
+    float input[3] = {1.0f, 2.0f, 3.0f};
+    float output;
 
     for (auto _ : state) {
-        benchmark::DoNotOptimize(x = context.process());
+        context.process(input, &output);
     }
 }
 BENCHMARK(affine_jit);
 
 static void affine_dyn(benchmark::State& state)
 {
-    float x = 42;
-    constant_process_node<float> node1{0.1f};
-    reference_process_node<float> node2{x};
-    constant_process_node<float> node3{5.0f};
+    process_node<float> in1{0u}, in2{0u}, in3{0u};
+    add_process_node<float> add;
+    mul_process_node<float> mul;
+    process_node<float> out{1u};
 
-    add_process_node<float> add_node;
-    mul_process_node<float> mul_node;
+    in1.connect(mul, 0u);
+    in2.connect(mul, 1u);
+    mul.connect(add, 0u);
+    in3.connect(add, 1u);
+    add.connect(out, 0u);
 
-    node1.connect(mul_node, 0);
-
-    node1.connect(mul_node, 0);
-    node2.connect(mul_node, 1);
-
-    mul_node.connect(add_node, 0);
-    node3.connect(add_node, 1);
+    float input[3] = {1.0f, 2.0f, 3.0f};
+    float output;
 
     for (auto _ : state) {
-        benchmark::DoNotOptimize(x = graph_process(add_node));
+        graph_process<float>({in1, in2, in3}, {out}, input, &output);
     }
 }
 BENCHMARK(affine_dyn);
@@ -150,29 +155,42 @@ BENCHMARK(affine_dyn);
 static void integrator_jit(benchmark::State& state)
 {
     graph_execution_context context;
-    constant_compile_node incr{context, 1.f};
+
+    compile_node_class in{context, 0u};
     add_compile_node add{context};
+    compile_node_class out{context, 1u};
 
-    incr.connect(add, 0);
-    add.connect(add, 1);
+    in.connect(add, 0u);
+    add.connect(add, 1u);
+    add.connect(out, 0u);
 
-    context.compile(add);
+    context.compile({in}, {out});
 
-    for (auto _ : state)
-        benchmark::DoNotOptimize(context.process());
+    float input = 1.0f;
+    float output = 0.0f;
+
+    for (auto _ : state) {
+        context.process(&input, &output);
+    }
 }
 BENCHMARK(integrator_jit);
 
 static void integrator_dyn(benchmark::State& state)
 {
-    constant_process_node incr{1.f};
-    add_process_node<float> add{};
+    process_node<float> in{0u};
+    add_process_node<float> add;
+    process_node<float> out{1u};
 
-    incr.connect(add, 0);
-    add.connect(add, 1);
+    in.connect(add, 0u);
+    add.connect(add, 1u);
+    add.connect(out, 0u);
 
-    for (auto _ : state)
-        benchmark::DoNotOptimize(graph_process(add));
+    float input = 1.0f;
+    float output = 0.0f;
+
+    for (auto _ : state) {
+        graph_process<float>({in}, {out}, &input, &output);
+    }
 }
 BENCHMARK(integrator_dyn);
 

@@ -1,153 +1,121 @@
-#include <iostream>
+
+
+#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
+#include <catch2/catch.hpp>
 
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 #include "test_implentations.h"
-#include "jit_compiler.h"
 
 using namespace llvm;
 using namespace ProcessGraph;
 
-
-void test_last()
+TEST_CASE("input to output", "input_output_one_instance")
 {
-    std::cout << "TEST LAST COMPONENT (state)" << std::endl;
     graph_execution_context context;
 
-    float input;
+    compile_node_class input{context, 0u};
+    compile_node_class output{context, 1u};
 
-    reference_compile_node inputc{context, input};
-    reference_process_node inputp{input};
+    input.connect(output, 0u);
 
-    last_compile_node lc{context, 0.0f};
-    last_process_node lp{0.0f};
+    context.compile({input}, {output});
 
-    inputc.connect(lc, 0u);
-    inputp.connect(lp, 0u);
+    const float in = 42.0f;
+    float out = 0.0f;
 
-    context.compile(lc);
+    context.process(&in, &out);
 
-    for (auto i = 0; i < 10; ++i) {
-        input = static_cast<float>(i);
-        std::cout << "input : " << input << ", lp : " << graph_process(lp) << ", lc :" << context.process() << std::endl;
-    }
+    REQUIRE(out == in);
 }
 
-void test_cycle()
+TEST_CASE("output alone", "input_alone")
 {
-    std::cout << "TEST INTEGRATOR CIRCUIT (cycle state)" << std::endl;
     graph_execution_context context;
 
-    float input = 0;
+    compile_node_class output{context, 1u};
+    context.compile({}, {output});
 
-    reference_compile_node inputc{context, input};
-    reference_process_node inputp{input};
+    float out = 42.0f;
+    context.process(nullptr, &out);
 
-    add_compile_node integrator_c{context};
-    add_process_node<float> integrator_p{};
-
-    //  Use cyle to integrate
-    inputc.connect(integrator_c, 0);
-    integrator_c.connect(integrator_c, 1);
-
-    inputp.connect(integrator_p, 0);
-    integrator_p.connect(integrator_p, 1);
-
-    context.compile(integrator_c);
-    for (auto i = 0; i < 10; ++i) {
-        input = static_cast<float>(i);
-        std::cout << "input : " << input << ", lp : " << graph_process(integrator_p) << ", lc :" << context.process() << std::endl;
-    }
+    REQUIRE(out == Approx(0.0f));
 }
 
-void dump_ref_node()
+TEST_CASE("Add graph 1", "add_graph 1")
 {
-    std::cout << "DUMP REF NODE" << std::endl;
     graph_execution_context context;
 
-    float input = 0;
+    compile_node_class in1{context, 0u}, in2{context, 0u};
+    compile_node_class out{context, 1u};
+    add_compile_node add{context};
 
-    reference_compile_node inputc{context, input};
-    context.compile_and_dump_to_file(inputc, "ref_node.bin");
+    in1.connect(add, 0u);
+    in2.connect(add, 1u);
+    add.connect(out, 0u);
+
+    context.compile_and_dump_to_file({in1, in2}, {out}, "add.bin");
+
+    const float input[2] = {1.f, 10.f};
+    float output = 0.f;
+
+    context.process(input, &output);
+
+    REQUIRE(output == Approx(input[0] + input[1]));
 }
 
-void dump_affine()
+TEST_CASE("cycle state : integrator")
 {
-    std::cout << "DUMP AFFINE" << std::endl;
-
-    float x = 42;
     graph_execution_context context;
 
-    constant_compile_node node1{context, 0.1f};
-    reference_compile_node node2{context, x};
-    constant_compile_node node3{context, 5.0f};
+    compile_node_class in{context, 0u}, out{context, 1u};
+    add_compile_node add{context};
 
-    add_compile_node add_node{context};
-    mul_compile_node mul_node{context};
+    in.connect(add, 0u);
+    add.connect(add, 1u); // cycle : state
+    add.connect(out, 0u);
 
-    node1.connect(mul_node, 0);
+    context.compile({in}, {out});
 
-    node1.connect(mul_node, 0);
-    node2.connect(mul_node, 1);
+    const float input = 1.0f;
+    float output = 0.0f;
 
-    mul_node.connect(add_node, 0);
-    node3.connect(add_node, 1);
+    context.process(&input, &output);
+    REQUIRE(output == Approx(1.0f));
 
-    context.compile_and_dump_to_file(node3, "affine.bin");
+    context.process(&input, &output);
+    REQUIRE(output == Approx(2.0f));
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(3.0f));
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(4.0f));
 }
 
-int main(int argc, char* argv[])
+TEST_CASE("DYN cycle state : integrator")
 {
-    float x;
+    process_node<float> in{0u}, out{1u};
+    add_process_node<float> add;
 
-    /**
-     *   Compute 41 + x (x as ref)
-     **/
+    in.connect(add, 0u);
+    add.connect(add, 1u); // cycle : state
+    add.connect(out, 0u);
 
-    //**  dynamic circuit
-    reference_process_node<float> rp{x};
-    constant_process_node<float> cp2{41.0f};
-    add_process_node<float> ap{};
+    const float input = 1.0f;
+    float output = 0.0f;
 
-    cp2.connect(ap, 1u);
+    graph_process({in}, {out}, &input, &output);
+    REQUIRE(output == Approx(1.0f));
 
-    //** compiled circuit
-    graph_execution_context context;
-    reference_compile_node rc{context, x};
-    constant_compile_node cc2{context, 41.0f};
-    add_compile_node ac{context};
+    graph_process({in}, {out}, &input, &output);
+    REQUIRE(output == Approx(2.0f));
 
-    cc2.connect(ac, 1u);
+    graph_process({in}, {out}, &input, &output);
+    REQUIRE(output == Approx(3.0f));
 
-    /* compile to native code */
-    context.compile(ac);
-
-    //--------------------------------------------------------------
-
-    // Execute
-
-    std::cout << "Set x = 10" << std::endl;
-    x = 10;
-
-    std::cout << "dynamic version return " << graph_process(ap) << std::endl;
-    std::cout << "compiled version return " << context.process() << std::endl;
-
-    std::cout << "link ref to add and recompile" << std::endl;
-
-    rp.connect(ap, 0u);
-    rc.connect(ac, 0u);
-
-    context.compile(ac);
-
-    std::cout << "dynamic version return " << graph_process(ap) << std::endl;
-    std::cout << "compiled version return " << context.process() << std::endl;
-
-
-    test_last();
-    test_cycle();
-    dump_ref_node();
-
-    return 0;
+    graph_process({in}, {out}, &input, &output);
+    REQUIRE(output == Approx(4.0f));
 }

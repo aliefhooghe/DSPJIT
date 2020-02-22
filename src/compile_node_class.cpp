@@ -60,7 +60,10 @@ namespace ProcessGraph {
             llvm::IRBuilder<>& builder,
             const compile_node_class& node);
 
-    void graph_execution_context::compile(compile_node_class& output_node, llvm::JITEventListener *listener)
+    void graph_execution_context::compile(
+            const node_ref_vector& input_nodes,
+            const node_ref_vector& output_nodes,
+            llvm::JITEventListener *listener)
     {
         using namespace llvm;
 
@@ -80,21 +83,62 @@ namespace ProcessGraph {
          **/
         IRBuilder builder(_llvm_context);
 
-        // Create a function
-        std::vector<llvm::Type*> arg_types{Type::getInt64Ty(_llvm_context)};
-        auto func_type = FunctionType::get(Type::getFloatTy(_llvm_context), arg_types, false /* is_var_arg */);
+        //  Memoise nodes noutput values
+        std::map<const compile_node_class*, llvm::Value*> node_values;
+
+        // Create ir function
+
+        //  function signature : void _(int64 instance_num, float *inputs, float *outputs)
+        std::vector<llvm::Type*> arg_types{
+            Type::getInt64Ty(_llvm_context),
+            Type::getFloatPtrTy(_llvm_context),
+            Type::getFloatPtrTy(_llvm_context)};
+
+        auto func_type = FunctionType::get(Type::getVoidTy(_llvm_context), arg_types, false /* is_var_arg */);
         auto function = Function::Create(func_type, Function::ExternalLinkage, "", module.get());
 
+        //  Create function code block
         BasicBlock *basic_block = BasicBlock::Create(_llvm_context, "", function);
         builder.SetInsertPoint(basic_block);
 
-        //  Get argument
-        auto instance_num_value = function->arg_begin();
+        //  Get arguments
+        auto arg_begin = function->arg_begin();
+        auto instance_num_value = arg_begin++;
+        auto inputs_array_value = arg_begin++;
+        auto outputs_array_value = arg_begin++;
 
-        // Compile return value
-        auto ret_val = compile_node_value(
-            builder, output_node, instance_num_value);
-        builder.CreateRet(ret_val);
+        //  generate code that load inputs from input array and
+        //  register input_nodes output as value. (for now 1 output per node)
+        {
+            auto input_index = 0u;
+            for (const auto& input_node : input_nodes) {
+                auto index_value = ConstantInt::get(_llvm_context, APInt(64, input_index));
+                auto input_ptr =  builder.CreateGEP(inputs_array_value, index_value);
+                auto input_val = builder.CreateLoad(input_ptr);
+                node_values[&input_node.get()] = input_val;
+                input_index++;
+            }
+        }
+
+        //  Compute output_nodes inputs and store them to output array
+        {
+            auto output_index = 0u;
+            for (const auto& output_node : output_nodes) {
+                const auto input_count = output_node.get().get_input_count();
+
+                for (auto i = 0u; i < input_count; ++i) {
+                    const auto dependency_node = output_node.get().get_input(i);
+                    auto value = compile_node_helper(builder, dependency_node, instance_num_value, node_values);
+                    auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, output_index));
+                    auto output_ptr = builder.CreateGEP(outputs_array_value, index_value);
+                    builder.CreateStore(value, output_ptr);
+                    output_index++;
+                }
+            }
+        }
+
+        //  Finish function by insterting a ret instruction
+        builder.CreateRetVoid();
 
 #ifndef NDEBUG
         LOG_INFO("[graph_execution_context][compile thread] IR code before optimization");
@@ -134,34 +178,41 @@ namespace ProcessGraph {
         };
     }
 
-    void graph_execution_context::compile_and_dump_to_file(compile_node_class& output_node, const std::string& filename)
+    void graph_execution_context::compile_and_dump_to_file(
+            const node_ref_vector& input_nodes,
+            const node_ref_vector& output_nodes,
+            const std::string& filename)
     {
         object_dumper dumper{filename};
-        compile(output_node, &dumper);
+        compile(input_nodes, output_nodes, &dumper);
     }
 
     llvm::Value *graph_execution_context::compile_node_helper(
             llvm::IRBuilder<>& builder,
-            const compile_node_class& node,
+            const compile_node_class* node,
             llvm::Value *instance_num_value,
             std::map<const compile_node_class*, llvm::Value*>& values)
     {
-        const auto input_count = node.get_input_count();
+        if (node == nullptr)
+            return llvm::ConstantFP::get(builder.getContext(), llvm::APFloat(0.0f));
+
+
+        const auto input_count = node->get_input_count();
         std::vector<llvm::Value*> input_values(input_count);
 
         // Check if a state have been created for this node
-        auto state_it = _state.find(&node);
+        auto state_it = _state.find(node);
         if (state_it == _state.end()) {
             //  If not create state
-            auto ret = _state.emplace(&node, mutable_node_state(node.mutable_state_size, _instance_count));
+            auto ret = _state.emplace(node, mutable_node_state(node->mutable_state_size, _instance_count));
             assert(ret.second);
             state_it = ret.first;
         }
 
         //
-        auto value_it = values.lower_bound(&node);
+        auto value_it = values.lower_bound(node);
 
-        if (value_it != values.end() && !(values.key_comp()(&node, value_it->first))) {
+        if (value_it != values.end() && !(values.key_comp()(node, value_it->first))) {
             //  This node have been visited : there is a cycle
 
             if (value_it->second == nullptr) {
@@ -183,41 +234,38 @@ namespace ProcessGraph {
         }
         else {
             //  This node have not been visited, create a null output value
-            value_it = values.emplace_hint(value_it, &node, nullptr);
+            value_it = values.emplace_hint(value_it, node, nullptr);
         }
 
         //  Compile dependencies input
         for (auto i = 0u; i < input_count; ++i) {
-            const auto *input = node.get_input(i);
-
-            if (input == nullptr) {
-                input_values[i] =
-                    llvm::ConstantFP::get(builder.getContext(), llvm::APFloat(0.0f));
-            }
-            else {
-                input_values[i] = compile_node_helper(builder, *input, instance_num_value, values);
-            }
+            const auto *input = node->get_input(i);
+            input_values[i] = compile_node_helper(builder, input, instance_num_value, values);
         }
 
         //  get state ptr
         llvm::Value *state_ptr = nullptr;
 
-        if (node.mutable_state_size != 0u) {
+        if (node->mutable_state_size != 0u) {
             // state_ptr <- base + instance_num * state size
             state_ptr =
                 create_array_ptr(
                     builder,
                     ir_helper::runtime::get_raw_pointer(builder, state_it->second.data.data()),
                     instance_num_value,
-                    node.mutable_state_size);
+                    node->mutable_state_size);
         }
 
+        /**
+         *
+         *  TODO :      GERER LES OUTPUTS MULTIPLES !!!
+         * ########
+         *
+         **/
+
         // compile processing
-        auto *value =
-            node.compile(
-                builder,
-                input_values,
-                state_ptr);
+        const auto output_values =
+            node->emit_outputs(builder, input_values, state_ptr);
 
         //  emit instruction to store output into cycle_state if cycle_state value was created
         if (value_it->second != nullptr) {
@@ -229,22 +277,13 @@ namespace ProcessGraph {
                         sizeof(float));
 
             builder.CreateStore(
-                value, ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
+                output_values[0], ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
         }
 
         // record output value
-        value_it->second = value;
+        value_it->second = output_values[0];
 
-        return value;
-    }
-
-    llvm::Value *graph_execution_context::compile_node_value(
-            llvm::IRBuilder<>& builder,
-            const compile_node_class& node,
-            llvm::Value *instance_num_value)
-    {
-        std::map<const compile_node_class*, llvm::Value*> values;
-        return compile_node_helper(builder, node, instance_num_value, values);
+        return output_values[0];
     }
 
     llvm::Value *graph_execution_context::create_array_ptr(
@@ -277,15 +316,17 @@ namespace ProcessGraph {
         }
     }
 
-    float graph_execution_context::process(std::size_t instance_num)
+    void graph_execution_context::process(std::size_t instance_num, const float * inputs, float *outputs)
     {
         compile_done_msg msg;
 
         //  Process one compile done msg (if any)
+        //  and update native code ptr
         if (_compile_done_msg_queue.dequeue(msg))
             _process_compile_done_msg(msg);
 
-        return _process_func(instance_num);
+        //  run native code
+        _process_func(instance_num, inputs, outputs);
     }
 
 

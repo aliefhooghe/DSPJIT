@@ -14,6 +14,9 @@ message (STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 find_package(benchmark REQUIRED)
 message (STATUS "Found Google benchmark in ${benchmark_DIR}")
 
+# Catch2 test framework
+find_package(Catch2 REQUIRED)
+
 
 ###----------###
 ### Targets  ###

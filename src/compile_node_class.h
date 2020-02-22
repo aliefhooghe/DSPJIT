@@ -10,6 +10,7 @@
 
 #include <vector>
 #include <map>
+#include <functional>
 
 #include "node.h"
 #include "lock_free_queue.h"
@@ -21,6 +22,7 @@ namespace ProcessGraph {
 
     //
     class compile_node_class : public node<compile_node_class> {
+        friend class graph_execution_context;
     public:
 
         compile_node_class(
@@ -30,13 +32,15 @@ namespace ProcessGraph {
 
         virtual ~compile_node_class();
 
+    protected:
         virtual void emit_initialize_rw_state(
                 llvm::IRBuilder<>& builder, llvm::Value *mutable_state) {}
 
-        virtual llvm::Value *compile(
+        virtual std::vector<llvm::Value*> emit_outputs(
                 llvm::IRBuilder<>& builder,
-                const std::vector<llvm::Value*>& input,
-                llvm::Value *mutable_state) const = 0;
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const
+                { return {}; }
 
         const std::size_t mutable_state_size;
     private:
@@ -44,11 +48,13 @@ namespace ProcessGraph {
     };
 
     class graph_execution_context {
-
-        static constexpr auto default_process_func = [](std::size_t) { return 0.0f; };
+        // void _(int64 instance_num, float *inputs, float *outputs)
+        using raw_func = void (*)(std::size_t instance_num, const float *inputs, float *outputs);
+        static constexpr auto default_process_func = [](std::size_t, const float*, float*) {};
 
     public:
         friend class compile_node_class;
+        using node_ref_vector = std::vector<std::reference_wrapper<compile_node_class>>;
 
         graph_execution_context(std::size_t instance_num = 1u);
         ~graph_execution_context();
@@ -56,16 +62,23 @@ namespace ProcessGraph {
         /**
          *   Compile Thread API
          **/
-        void compile(compile_node_class& output_node, llvm::JITEventListener *listener = nullptr);
-        void compile_and_dump_to_file(compile_node_class& output_node, const std::string& filename);
+        void compile(
+            const node_ref_vector& input_nodes,
+            const node_ref_vector& output_nodes,
+            llvm::JITEventListener *listener = nullptr);
+
+        void compile_and_dump_to_file(
+            const node_ref_vector& input_nodes,
+            const node_ref_vector& output_nodes,
+            const std::string& filename);
 
         /**
          *   Process Thread API
          **/
-        float process(std::size_t instance_num = 0u);
+        void process(std::size_t instance_num, const float * inputs, float *outputs);
+        void process(const float *inputs, float *outputs)   {   process(0u, inputs, outputs);   }
 
     private:
-        using raw_func = float (*)(std::size_t);
 
         struct mutable_node_state {
             explicit mutable_node_state(std::size_t state_size, std::size_t instance_count)
@@ -115,18 +128,13 @@ namespace ProcessGraph {
         /* Compileling helpers */
         llvm::Value *compile_node_helper(
             llvm::IRBuilder<>& builder,
-            const compile_node_class& node,
+            const compile_node_class* node,
             llvm::Value *instance_num_value,
             std::map<const compile_node_class*, llvm::Value*>& values);
 
-        llvm::Value *compile_node_value(
-            llvm::IRBuilder<>& builder,
-            const compile_node_class& node,
-            llvm::Value *instance_num_value);
-
         llvm::Value *create_array_ptr(
             llvm::IRBuilder<>& builder,
-            llvm::Value *base,
+            llvm::Value *raw_ptr_base,
             llvm::Value *index,
             std::size_t block_size);
 

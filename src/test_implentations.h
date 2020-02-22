@@ -20,7 +20,7 @@ namespace ProcessGraph {
         {}
 
     protected:
-        void do_process(const std::vector<T>&) override
+        void process(const T*) override
         {
             process_node<T>::output = _value;
         }
@@ -37,10 +37,10 @@ namespace ProcessGraph {
             _value(value)
         {}
 
-        llvm::Value *compile(
-            llvm::IRBuilder<>& builder,
-            const std::vector<llvm::Value*>&,
-            llvm::Value*) const override;
+        std::vector<llvm::Value*> emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
     private:
         const float _value;
     };
@@ -56,7 +56,7 @@ namespace ProcessGraph {
         {}
 
     protected:
-        void do_process(const std::vector<T>&) override
+        void process(const T*) override
         {
             process_node<T>::output = _ref;
         }
@@ -74,10 +74,10 @@ namespace ProcessGraph {
             _ref{ref}
         {}
 
-        llvm::Value *compile(
-            llvm::IRBuilder<>& builder,
-            const std::vector<llvm::Value*>&,
-            llvm::Value*) const override;
+        std::vector<llvm::Value*> emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
 
     private:
         const float& _ref;
@@ -93,7 +93,7 @@ namespace ProcessGraph {
             process_node<T>(2) {}
 
     protected:
-        void do_process(const std::vector<T>& input) override
+        void process(const T *input) override
         {
             process_node<T>::output = input[0] + input[1];
         }
@@ -105,10 +105,10 @@ namespace ProcessGraph {
             compile_node_class{context, 2}
         {}
 
-        llvm::Value *compile(
-            llvm::IRBuilder<>& builder,
-            const std::vector<llvm::Value*>& input,
-            llvm::Value*) const override;
+        std::vector<llvm::Value*> emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
     };
 
     // Mull
@@ -121,7 +121,7 @@ namespace ProcessGraph {
             process_node<Tsample>(2) {}
 
     protected:
-        void do_process(const std::vector<Tsample>& input) override
+        void process(const Tsample *input) override
         {
             process_node<Tsample>::output = input[0] * input[1];
         }
@@ -133,10 +133,10 @@ namespace ProcessGraph {
         :   compile_node_class{context, 2}
         {}
 
-        llvm::Value *compile(
-            llvm::IRBuilder<>& builder,
-            const std::vector<llvm::Value*>& input,
-            llvm::Value*) const override;
+        std::vector<llvm::Value*> emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
     };
 
     // Z^-1
@@ -151,7 +151,7 @@ namespace ProcessGraph {
         {}
 
     protected:
-        void do_process(const std::vector<T>& input) override
+        void process(const T *input) override
         {
             const T ret = _last;
             _last = input[0];
@@ -172,10 +172,10 @@ namespace ProcessGraph {
             _initial_value{initial_value}
         {}
 
-        llvm::Value *compile(
-            llvm::IRBuilder<>& builder,
-            const std::vector<llvm::Value*>& input,
-            llvm::Value* state) const override;
+        std::vector<llvm::Value*> emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
 
     private:
         const float _initial_value;
@@ -187,7 +187,7 @@ namespace ProcessGraph {
     class unary_function_process_node : public process_node<float> {
 
     protected:
-        void do_process(const std::vector<float>& input) override
+        void process(const float *input) override
         {
             process_node<float>::output = unary(input[0]);
         }
@@ -200,16 +200,13 @@ namespace ProcessGraph {
         : compile_node_class{context, 1}
         {}
 
-        llvm::Value *compile(
-            llvm::IRBuilder<>& builder,
-            const std::vector<llvm::Value*>& input,
-            void*) const override
+        std::vector<llvm::Value*> emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override
         {
-            // TODO
-
-            auto& context = builder.getContext();
-
-            return nullptr;
+            //  TODO
+            return {nullptr};
         }
     };
 

@@ -23,15 +23,6 @@ find_package(Catch2 REQUIRED)
 ###----------###
 
 ## _______________
-## LLVM Setup Test
-
-add_executable(setup_test setup_test.cpp jit_compiler.h jit_compiler.cpp)
-target_link_libraries(setup_test LLVM)
-set_target_properties(setup_test PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES)
-
-## _______________
 ## Graph compilation
 
 set(SRC

@@ -83,14 +83,14 @@ namespace ProcessGraph {
         module.print(stream, nullptr);
     }
 
-    llvm::Value *compile_node_value(
-            llvm::IRBuilder<>& builder,
-            const compile_node_class& node);
+    void graph_execution_context::register_JITEventListener(llvm::JITEventListener* listener)
+    {
+        _execution_engine->RegisterJITEventListener(listener);
+    }
 
     void graph_execution_context::compile(
             const node_ref_vector& input_nodes,
-            const node_ref_vector& output_nodes,
-            llvm::JITEventListener *listener)
+            const node_ref_vector& output_nodes)
     {
         using namespace llvm;
 
@@ -207,15 +207,6 @@ namespace ProcessGraph {
             _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
             LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
         };
-    }
-
-    void graph_execution_context::compile_and_dump_to_file(
-            const node_ref_vector& input_nodes,
-            const node_ref_vector& output_nodes,
-            const std::string& filename)
-    {
-        object_dumper dumper{filename};
-        compile(input_nodes, output_nodes, &dumper);
     }
 
     llvm::Value *graph_execution_context::compile_node_helper(

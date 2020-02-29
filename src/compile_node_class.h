@@ -65,15 +65,12 @@ namespace ProcessGraph {
         /**
          *   Compile Thread API
          **/
+        void register_JITEventListener(llvm::JITEventListener*);
+
         void compile(
             const node_ref_vector& input_nodes,
-            const node_ref_vector& output_nodes,
-            llvm::JITEventListener *listener = nullptr);
+            const node_ref_vector& output_nodes);
 
-        void compile_and_dump_to_file(
-            const node_ref_vector& input_nodes,
-            const node_ref_vector& output_nodes,
-            const std::string& filename);
 
         /**
          *   Process Thread API

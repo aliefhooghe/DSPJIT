@@ -56,7 +56,7 @@ TEST_CASE("Add graph 1", "add_graph 1")
     in2.connect(add, 1u);
     add.connect(out, 0u);
 
-    context.compile_and_dump_to_file({in1, in2}, {out}, "add.bin");
+    context.compile({in1, in2}, {out});
 
     const float input[2] = {1.f, 10.f};
     float output = 0.f;

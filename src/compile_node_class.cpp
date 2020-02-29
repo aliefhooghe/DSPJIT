@@ -1,12 +1,12 @@
 
-#include <llvm/Support/raw_os_ostream.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/ADT/APFloat.h>
 #include <llvm/Support/CommandLine.h>
 
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
-#include "llvm/Support/TargetSelect.h"
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_os_ostream.h>
 
 #include <map>
 #include <iostream>
@@ -75,12 +75,6 @@ namespace ProcessGraph {
     graph_execution_context::~graph_execution_context()
     {
 
-    }
-
-    static void print_module(const llvm::Module& module)
-    {
-        llvm::raw_os_ostream stream{std::cout};
-        module.print(stream, nullptr);
     }
 
     void graph_execution_context::register_JITEventListener(llvm::JITEventListener* listener)
@@ -169,7 +163,7 @@ namespace ProcessGraph {
 
 #ifndef NDEBUG
         LOG_INFO("[graph_execution_context][compile thread] IR code before optimization");
-        print_module(*module);
+        ir_helper::print_module(*module);
 #endif
 
         //  Check generated IR code
@@ -187,7 +181,7 @@ namespace ProcessGraph {
 
 #ifndef NDEBUG
             LOG_INFO("[graph_execution_context][compile thread] IR code after optimization");
-            print_module(*module);
+            ir_helper::print_module(*module);
 #endif
 
             auto module_ptr = module.get();

@@ -11,6 +11,8 @@
 
 namespace ir_helper {
 
+    void print_module(const llvm::Module& module);
+
     namespace runtime {
 
         template <typename T>

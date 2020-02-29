@@ -5,14 +5,16 @@
 #include <llvm/ADT/APFloat.h>
 #include <llvm/Support/CommandLine.h>
 
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/Support/TargetSelect.h"
+
 #include <map>
 #include <iostream>
 #include <algorithm>
 
-#include "jit_compiler.h"
+#include "ir_optimization.h"
 #include "ir_helper.h"
 #include "compile_node_class.h"
-#include "log.h"
 
 namespace ProcessGraph {
 
@@ -32,17 +34,42 @@ namespace ProcessGraph {
 
     //---
 
-    graph_execution_context::graph_execution_context(std::size_t instance_count)
+    graph_execution_context::graph_execution_context(
+        std::size_t instance_count,
+        const llvm::TargetOptions& options)
     :   _sequence{0u},
         _instance_count{instance_count},
         _ack_msg_queue{3},
         _compile_done_msg_queue{3}
     {
+        static auto llvm_native_was_init = false;
+        if (llvm_native_was_init == false) {
+            llvm::InitializeNativeTarget();
+            llvm::InitializeNativeTargetAsmPrinter();
+            llvm_native_was_init = true;
+        }
+
+        //  Initialize executionEngine
+
+        /**
+         *  todo options, InitializeNativeTarget, ...,
+         **/
+        auto memory_mgr =
+            std::unique_ptr<llvm::RTDyldMemoryManager>(new llvm::SectionMemoryManager());
+
+        _execution_engine =
+            std::unique_ptr<llvm::ExecutionEngine>(
+                llvm::EngineBuilder{std::make_unique<llvm::Module>("dummy", _llvm_context)}
+                .setEngineKind(llvm::EngineKind::JIT)
+                .setTargetOptions(options)
+                .setMCJITMemoryManager(std::move(memory_mgr))
+                .create());
+
         //  Default native function does nothing
         _process_func = default_process_func;
 
-        //  Create the associated delete_sequence (without execution engine)
-        _delete_sequences.emplace(_sequence, delete_sequence{});
+        //  Create the associated delete_sequence
+        _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine});
     }
 
     graph_execution_context::~graph_execution_context()
@@ -163,17 +190,21 @@ namespace ProcessGraph {
             print_module(*module);
 #endif
 
-            auto engine = jit_test::build_execution_engine(std::move(module), listener);
+            auto module_ptr = module.get();
+
+            //  Compile module to native code
+            _execution_engine->addModule(std::move(module));
+            _execution_engine->finalizeObject();
 
             raw_func native_func =
-                reinterpret_cast<raw_func>(engine->getPointerToFunction(function));
+                reinterpret_cast<raw_func>(_execution_engine->getPointerToFunction(function));
 
             /**
              *      Notify process thread that a native function is ready
              **/
             _sequence++;
             _compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func});
-            _delete_sequences.emplace(_sequence, delete_sequence{std::move(engine)});
+            _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
             LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
         };
     }
@@ -308,10 +339,13 @@ namespace ProcessGraph {
         auto it = _state.find(node);
         //  If we have a state recorded for this node
         if (it != _state.end()) {
-            //  Move the state in the delete_sequence in order to make it deleted when possible
-            _delete_sequences[_sequence].add_deleted_node(std::move(it->second));
+            //  get iterator to current delete sequence (map can't be empty)
+            auto del_seq_it = _delete_sequences.rbegin();
 
-            //  Remove the coresponding enrty in state store
+            //  Move the state in the delete_sequence in order to make it deleted when possible
+            del_seq_it->second.add_deleted_node(std::move(it->second));
+
+            //  Remove the coresponding entry in state store
             _state.erase(it);
         }
     }

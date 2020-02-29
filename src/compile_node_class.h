@@ -15,6 +15,7 @@
 #include "node.h"
 #include "lock_free_queue.h"
 #include "object_dumper.h"
+#include "log.h"
 
 namespace ProcessGraph {
 
@@ -56,7 +57,9 @@ namespace ProcessGraph {
         friend class compile_node_class;
         using node_ref_vector = std::vector<std::reference_wrapper<compile_node_class>>;
 
-        graph_execution_context(std::size_t instance_num = 1u);
+        graph_execution_context(
+            std::size_t instance_num = 1u,
+            const llvm::TargetOptions& options = llvm::TargetOptions{});
         ~graph_execution_context();
 
         /**
@@ -97,18 +100,22 @@ namespace ProcessGraph {
 
         class delete_sequence {
         public:
-            explicit delete_sequence(std::unique_ptr<llvm::ExecutionEngine>&& engine)
-            : _execution_engine{std::move(engine)}
+            explicit delete_sequence(llvm::ExecutionEngine& e, llvm::Module *m = nullptr) noexcept
+            : _engine{e},  _module{m}
             {}
 
-            delete_sequence() = default;
-            delete_sequence(delete_sequence&&) = default;
+            ~delete_sequence() = default;
             delete_sequence(delete_sequence&) = delete;
+
+            delete_sequence(delete_sequence&& o) noexcept
+            : _engine{o._engine}, _module{o._module}, _node_states{std::move(o._node_states)}
+            {   o._module = nullptr;    }
 
             void add_deleted_node(mutable_node_state && state) { _node_states.emplace_back(std::move(state)); }
 
         private:
-            std::unique_ptr<llvm::ExecutionEngine> _execution_engine;
+            llvm::ExecutionEngine& _engine;
+            llvm::Module *_module{nullptr};
             std::vector<mutable_node_state> _node_states;
         };
 
@@ -124,6 +131,7 @@ namespace ProcessGraph {
          **/
 
         llvm::LLVMContext _llvm_context{};
+        std::unique_ptr<llvm::ExecutionEngine> _execution_engine;
 
         /* Compileling helpers */
         llvm::Value *compile_node_helper(

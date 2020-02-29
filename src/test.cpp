@@ -88,11 +88,20 @@ TEST_CASE("cycle state : integrator")
     context.process(&input, &output);
     REQUIRE(output == Approx(2.0f));
 
+    //  Recompilation
+    context.compile({in}, {out});
+
     context.process(&input, &output);
     REQUIRE(output == Approx(3.0f));
 
     context.process(&input, &output);
     REQUIRE(output == Approx(4.0f));
+
+    //  Recompilation again
+    context.compile({in}, {out});
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(5.0f));
 }
 
 TEST_CASE("DYN cycle state : integrator")

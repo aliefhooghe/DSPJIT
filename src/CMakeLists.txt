@@ -30,8 +30,8 @@ set(SRC
     compile_node_class.h
     ir_helper.cpp
     ir_helper.h
-    jit_compiler.h
-    jit_compiler.cpp
+    ir_optimization.h
+    ir_optimization.cpp
     lock_free_queue.h
     log.h
     node.h

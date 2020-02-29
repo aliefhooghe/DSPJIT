@@ -66,6 +66,7 @@ namespace ProcessGraph {
          *   Compile Thread API
          **/
         void register_JITEventListener(llvm::JITEventListener*);
+        void add_module(std::unique_ptr<llvm::Module>&&);
 
         void compile(
             const node_ref_vector& input_nodes,

@@ -82,6 +82,11 @@ namespace ProcessGraph {
         _execution_engine->RegisterJITEventListener(listener);
     }
 
+    void graph_execution_context::add_module(std::unique_ptr<llvm::Module>&& module)
+    {
+        _execution_engine->addModule(std::move(module));
+    }
+
     void graph_execution_context::compile(
             const node_ref_vector& input_nodes,
             const node_ref_vector& output_nodes)

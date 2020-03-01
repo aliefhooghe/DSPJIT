@@ -6,7 +6,7 @@
 
 #include <math.h>
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     // Constant node
 

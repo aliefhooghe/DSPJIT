@@ -2,7 +2,7 @@
 #include <fstream>
 #include "object_dumper.h"
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     object_dumper::object_dumper(const std::string& filename)
     : _filename{filename}

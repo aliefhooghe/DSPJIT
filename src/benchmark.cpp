@@ -6,7 +6,7 @@
 
 #include "test_implentations.h"
 
-using namespace ProcessGraph;
+using namespace DSPJIT;
 using namespace llvm;
 
 /*

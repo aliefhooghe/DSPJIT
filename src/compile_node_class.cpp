@@ -16,7 +16,7 @@
 #include "ir_helper.h"
 #include "compile_node_class.h"
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     compile_node_class::compile_node_class(
             graph_execution_context& context,
@@ -182,7 +182,7 @@ namespace ProcessGraph {
             /**
              *      Compile LLVM IR to native code
              **/
-            jit_test::run_optimization(*module, *function);
+            run_optimization(*module, *function);
 
 #ifndef NDEBUG
             LOG_INFO("[graph_execution_context][compile thread] IR code after optimization");

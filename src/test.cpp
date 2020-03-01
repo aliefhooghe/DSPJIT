@@ -10,7 +10,7 @@
 #include "test_implentations.h"
 
 using namespace llvm;
-using namespace ProcessGraph;
+using namespace DSPJIT;
 
 TEST_CASE("input to output", "input_output_one_instance")
 {

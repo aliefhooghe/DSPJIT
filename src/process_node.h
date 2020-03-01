@@ -6,7 +6,7 @@
 
 #include "node.h"
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     template <typename Tsample>
     class process_node : public node<process_node<Tsample>> {

@@ -3,7 +3,7 @@
 
 #include <vector>
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     template <typename Tderived>
     class node {

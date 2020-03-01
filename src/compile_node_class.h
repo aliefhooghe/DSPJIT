@@ -17,7 +17,7 @@
 #include "object_dumper.h"
 #include "log.h"
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     class graph_execution_context;
 

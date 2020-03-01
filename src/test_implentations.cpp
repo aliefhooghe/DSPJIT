@@ -5,7 +5,7 @@
 #include "test_implentations.h"
 #include "ir_helper.h"
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     // Compile :
 

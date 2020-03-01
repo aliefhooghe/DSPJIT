@@ -13,7 +13,7 @@
 
 #include "ir_optimization.h"
 
-namespace jit_test {
+namespace DSPJIT {
 
     void run_optimization(llvm::Module& m, llvm::Function& func)
     {

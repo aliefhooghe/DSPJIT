@@ -3,7 +3,7 @@
 
 #include <llvm/ExecutionEngine/JITEventListener.h>
 
-namespace ProcessGraph {
+namespace DSPJIT {
 
     class object_dumper : public llvm::JITEventListener {
 

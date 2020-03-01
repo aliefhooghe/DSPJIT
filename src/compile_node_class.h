@@ -85,10 +85,10 @@ namespace DSPJIT {
             explicit mutable_node_state(std::size_t state_size, std::size_t instance_count)
             :   cycle_state(instance_count, 0.f),
                 data(state_size * instance_count, 0u),
-                size{size}
+                size{state_size}
             {}
 
-            mutable_node_state(mutable_node_state&) = delete;
+            mutable_node_state(const mutable_node_state&) = delete;
             mutable_node_state(mutable_node_state&&) = default;
 
             std::vector<float> cycle_state;
@@ -103,7 +103,7 @@ namespace DSPJIT {
             {}
 
             ~delete_sequence() = default;
-            delete_sequence(delete_sequence&) = delete;
+            delete_sequence(const delete_sequence&) = delete;
 
             delete_sequence(delete_sequence&& o) noexcept
             : _engine{o._engine}, _module{o._module}, _node_states{std::move(o._node_states)}

@@ -333,7 +333,7 @@ namespace DSPJIT {
             auto del_seq_it = _delete_sequences.rbegin();
 
             //  Move the state in the delete_sequence in order to make it deleted when possible
-            del_seq_it->second.add_deleted_node(std::move(it->second));
+           del_seq_it->second.add_deleted_node(std::move(it->second));
 
             //  Remove the coresponding entry in state store
             _state.erase(it);

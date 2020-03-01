@@ -3,51 +3,27 @@
 
 #include <stdio.h>
 
-#define LOG_RED 31
-#define LOG_GREEN 32
-#define LOG_YELLOW 33
-#define LOG_BLUE 34
-#define LOG_MAGENTA 35
-#define LOG_CYAN 36
-
-namespace logger {
-
-    enum class color : unsigned int {
-        normal = 0,
-        red = 31u,
-        green,
-        yellow,
-        blue,
-        magenta,
-        cyan
-    };
-
-    template <typename ...Targs>
-    void print(FILE *stream, const color c, const bool bold, const char *fmt, const Targs ...args)
-    {
-        if (c == color::normal) {
-            fprintf(stream, fmt, args...);
-        }
-        else {
-            fprintf(stream, "\033[%u;%um",
-                static_cast<unsigned int>(bold),
-                static_cast<unsigned int>(c));
-            fprintf(stream, fmt, args...);
-            fprintf(stream, "\033[0m");
-        }
-
-        fprintf(stream, "\n");
-    }
-
-}
+/**
+ *    NOCOLOR    0
+ *    RED        31
+ *    GREEN      32
+ *    YELLOW     33
+ *    BLUE       34
+ *    MAGENTA    35
+ *    CYAN       36
+ **/
 
 
-#define LOG_ERROR(...) { logger::print(stderr, logger::color::red, true, __VA_ARGS__); }
-#define LOG_WARNING(...) { logger::print(stderr, logger::color::magenta, true, __VA_ARGS__); }
-#define LOG_INFO(...) { logger::print(stderr, logger::color::normal, false, __VA_ARGS__); }
+#define _BEGIN_COLOR(bold, color) "\033[" #bold ";" #color "m"
+#define _END_COLOR "\033[0m"
+
+
+#define LOG_ERROR(...)      { fprintf(stdout, _BEGIN_COLOR(1, 31) "[  ERROR  ]\t" _END_COLOR __VA_ARGS__); fprintf(stdout, "\n"); }
+#define LOG_WARNING(...)    { fprintf(stdout, _BEGIN_COLOR(1, 35) "[ WARNING ]\t" _END_COLOR __VA_ARGS__); fprintf(stdout, "\n"); }
+#define LOG_INFO(...)       { fprintf(stdout, _BEGIN_COLOR(1, 1) "[  INFO   ]\t" _END_COLOR __VA_ARGS__);  fprintf(stdout, "\n"); }
 
 #ifndef NDEBUG
-#define LOG_DEBUG(...) { logger::print(stderr, logger::color::blue, false, __VA_ARGS__); }
+#define LOG_DEBUG(...)      { fprintf(stdout, _BEGIN_COLOR(1, 32) "[  DEBUG  ]\t" _END_COLOR __VA_ARGS__); fprintf(stdout, "\n"); }
 #else
 #define LOG_DEBUG(...) {  }
 #endif

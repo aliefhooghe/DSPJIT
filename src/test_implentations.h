@@ -31,9 +31,8 @@ namespace DSPJIT {
     class constant_compile_node : public compile_node_class {
 
     public:
-        explicit constant_compile_node(
-            graph_execution_context& context,const float value)
-        :   compile_node_class(context, 0u),
+        explicit constant_compile_node(const float value)
+        :   compile_node_class(0u),
             _value(value)
         {}
 
@@ -67,10 +66,8 @@ namespace DSPJIT {
 
     class reference_compile_node : public compile_node_class {
     public:
-        explicit reference_compile_node(
-            graph_execution_context& context,
-            const float& ref)
-        :   compile_node_class{context, 0u},
+        explicit reference_compile_node(const float& ref)
+        :   compile_node_class{0u},
             _ref{ref}
         {}
 
@@ -101,8 +98,8 @@ namespace DSPJIT {
 
     class add_compile_node : public compile_node_class {
     public:
-        add_compile_node(graph_execution_context& context) :
-            compile_node_class{context, 2}
+        add_compile_node() :
+            compile_node_class{2}
         {}
 
         std::vector<llvm::Value*> emit_outputs(
@@ -129,8 +126,8 @@ namespace DSPJIT {
 
     class mul_compile_node : public compile_node_class {
     public:
-        mul_compile_node(graph_execution_context& context)
-        :   compile_node_class{context, 2}
+        mul_compile_node()
+        :   compile_node_class{2}
         {}
 
         std::vector<llvm::Value*> emit_outputs(
@@ -165,10 +162,8 @@ namespace DSPJIT {
     class last_compile_node : public compile_node_class {
 
     public:
-        last_compile_node(
-            graph_execution_context& context,
-            const float initial_value)
-        :   compile_node_class{context, 1, sizeof(float)},
+        last_compile_node(const float initial_value)
+        :   compile_node_class{1, sizeof(float)},
             _initial_value{initial_value}
         {}
 
@@ -196,8 +191,8 @@ namespace DSPJIT {
     template <float unary(float)>
     class unary_function_compile_node : public compile_node_class {
     public:
-        unary_function_compile_node(graph_execution_context& context)
-        : compile_node_class{context, 1}
+        unary_function_compile_node()
+        : compile_node_class{1}
         {}
 
         std::vector<llvm::Value*> emit_outputs(

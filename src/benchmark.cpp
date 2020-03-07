@@ -18,8 +18,8 @@ static void deref_pointer_jit(benchmark::State& state)
 {
     float x = 42;
     graph_execution_context context;
-    reference_compile_node node{context, x};
-    compile_node_class out{context, 1u};
+    reference_compile_node node{x};
+    compile_node_class out{1u};
 
     context.compile({}, {out});
 
@@ -55,9 +55,9 @@ static void add1_jit(benchmark::State& state)
 {
     graph_execution_context context;
 
-    compile_node_class in1{context, 0u}, in2{context, 0u};
-    add_compile_node add{context};
-    compile_node_class out{context, 1u};
+    compile_node_class in1{0u}, in2{0u};
+    add_compile_node add{};
+    compile_node_class out{1u};
 
     in1.connect(add, 0);
     in2.connect(add, 1);
@@ -101,10 +101,10 @@ static void affine_jit(benchmark::State& state)
 {
     graph_execution_context context;
 
-    compile_node_class in1{context, 0u}, in2{context, 0u}, in3{context, 0u};
-    add_compile_node add{context};
-    mul_compile_node mul{context};
-    compile_node_class out{context, 1u};
+    compile_node_class in1{0u}, in2{0u}, in3{0u};
+    add_compile_node add{};
+    mul_compile_node mul{};
+    compile_node_class out{1u};
 
     in1.connect(mul, 0u);
     in2.connect(mul, 1u);
@@ -155,9 +155,9 @@ static void integrator_jit(benchmark::State& state)
 {
     graph_execution_context context;
 
-    compile_node_class in{context, 0u};
-    add_compile_node add{context};
-    compile_node_class out{context, 1u};
+    compile_node_class in{0u};
+    add_compile_node add{};
+    compile_node_class out{1u};
 
     in.connect(add, 0u);
     add.connect(add, 1u);

@@ -19,18 +19,11 @@
 namespace DSPJIT {
 
     compile_node_class::compile_node_class(
-            graph_execution_context& context,
             const unsigned int input_count,
             std::size_t mutable_state_size_bytes)
     : node<compile_node_class>{input_count},
-            _context{context},
             mutable_state_size{mutable_state_size_bytes}
     {}
-
-    compile_node_class::~compile_node_class()
-    {
-        _context.notify_delete_node(this);
-    }
 
     //---
 
@@ -165,6 +158,24 @@ namespace DSPJIT {
 
         //  Finish function by insterting a ret instruction
         builder.CreateRetVoid();
+
+        {
+            //  get iterator to current (last) delete sequence (map can't be empty)
+            auto del_seq_it = _delete_sequences.rbegin();
+
+            //  State management : find states that are not anymore useds
+            for (auto state_it = _state.begin(); state_it != _state.end(); ++state_it) {
+                //  if this node is not used anymore
+                if (node_values.find(state_it->first) == node_values.end())
+                {
+                    //  Move the state in the delete_sequence in order to make it deleted when possible
+                    del_seq_it->second.add_deleted_node(std::move(state_it->second));
+
+                    //  Remove the coresponding entry in state store
+                    _state.erase(state_it);
+                }
+            }
+        }
 
 #ifndef NDEBUG
         LOG_INFO("[graph_execution_context][compile thread] IR code before optimization");
@@ -318,26 +329,6 @@ namespace DSPJIT {
                     builder.CreateMul(
                         index,
                         llvm::ConstantInt::get(_llvm_context,llvm::APInt(64, block_size))));
-    }
-
-    void graph_execution_context::notify_delete_node(compile_node_class *node)
-    {
-        /**
-         *      We can't remove directly the state as it is maybe used by the process_thread
-         */
-
-        auto it = _state.find(node);
-        //  If we have a state recorded for this node
-        if (it != _state.end()) {
-            //  get iterator to current delete sequence (map can't be empty)
-            auto del_seq_it = _delete_sequences.rbegin();
-
-            //  Move the state in the delete_sequence in order to make it deleted when possible
-           del_seq_it->second.add_deleted_node(std::move(it->second));
-
-            //  Remove the coresponding entry in state store
-            _state.erase(it);
-        }
     }
 
     void graph_execution_context::process(std::size_t instance_num, const float * inputs, float *outputs)

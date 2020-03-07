@@ -16,8 +16,8 @@ TEST_CASE("input to output", "input_output_one_instance")
 {
     graph_execution_context context;
 
-    compile_node_class input{context, 0u};
-    compile_node_class output{context, 1u};
+    compile_node_class input{0u};
+    compile_node_class output{1u};
 
     input.connect(output, 0u);
 
@@ -35,7 +35,7 @@ TEST_CASE("output alone", "input_alone")
 {
     graph_execution_context context;
 
-    compile_node_class output{context, 1u};
+    compile_node_class output{1u};
     context.compile({}, {output});
 
     float out = 42.0f;
@@ -48,9 +48,9 @@ TEST_CASE("Add graph 1", "add_graph 1")
 {
     graph_execution_context context;
 
-    compile_node_class in1{context, 0u}, in2{context, 0u};
-    compile_node_class out{context, 1u};
-    add_compile_node add{context};
+    compile_node_class in1{0u}, in2{0u};
+    compile_node_class out{1u};
+    add_compile_node add;
 
     in1.connect(add, 0u);
     in2.connect(add, 1u);
@@ -70,8 +70,8 @@ TEST_CASE("cycle state : integrator")
 {
     graph_execution_context context;
 
-    compile_node_class in{context, 0u}, out{context, 1u};
-    add_compile_node add{context};
+    compile_node_class in{0u}, out{1u};
+    add_compile_node add;
 
     in.connect(add, 0u);
     add.connect(add, 1u); // cycle : state

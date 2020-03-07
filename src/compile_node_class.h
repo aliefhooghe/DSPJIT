@@ -25,13 +25,11 @@ namespace DSPJIT {
     class compile_node_class : public node<compile_node_class> {
         friend class graph_execution_context;
     public:
-
         compile_node_class(
-                graph_execution_context& context,
                 const unsigned int input_count,
                 std::size_t mutable_state_size_bytes = 0u);
 
-        virtual ~compile_node_class();
+        virtual ~compile_node_class() = default;
 
     protected:
         virtual void emit_initialize_rw_state(
@@ -44,8 +42,6 @@ namespace DSPJIT {
                 { return {}; }
 
         const std::size_t mutable_state_size;
-    private:
-        graph_execution_context& _context;
     };
 
     class graph_execution_context {
@@ -143,10 +139,6 @@ namespace DSPJIT {
             llvm::Value *raw_ptr_base,
             llvm::Value *index,
             std::size_t block_size);
-
-        /* Nodes callbacks */
-        void notify_delete_node(compile_node_class*);
-        void notify_graph_change() {}     /*  TODO : Any parameters to know what is the modification ? it could be useful for dependencies computations */
 
         /* ack msg process*/
         void _process_ack_msg(const ack_msg msg);

@@ -35,7 +35,6 @@ namespace DSPJIT {
                 const std::vector<llvm::Value*>& inputs,
                 llvm::Value *mutable_state_ptr) const override;
     private:
-        llvm::FunctionType *create_func_type(llvm::IRBuilder<>& builder) const;
         const std::string _symbol;
     };
 
@@ -57,9 +56,13 @@ namespace DSPJIT {
         const auto input_count = get_input_count();
         const auto output_count = 1u;
 
-        auto func_type = create_func_type(builder);
         auto module = builder.GetInsertBlock()->getModule();
-        auto function = module->getOrInsertFunction(_symbol, func_type);
+        auto function = module->getFunction(_symbol);
+
+        if (function == nullptr) {
+            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup", _symbol.c_str())
+            throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
+        }
 
         //  Allocate outputs
         std::vector<llvm::Value*> outputs_ptr{output_count};
@@ -81,11 +84,11 @@ namespace DSPJIT {
             arg_values.push_back(outputs_ptr[i]);
 
         //  Create call instruction
-        builder.CreateCall(function, arg_values);
-        // llvm::InlineFunctionInfo info;
+        auto call_inst = builder.CreateCall(function, arg_values);
+        llvm::InlineFunctionInfo info;
 
-        // if (!llvm::InlineFunction(call_inst, info))
-        //     LOG_WARNING("[external_plugin_node] Unable to inline function");
+        if (!llvm::InlineFunction(call_inst, info))
+            LOG_WARNING("[external_plugin_node] Unable to inline function");
 
 
         //  Get and return Output values
@@ -94,22 +97,6 @@ namespace DSPJIT {
             output_values[i] = builder.CreateLoad(outputs_ptr[i]);
 
         return output_values;
-    }
-
-    llvm::FunctionType *external_plugin_node::create_func_type(llvm::IRBuilder<>& builder) const
-    {
-        const auto input_count = get_input_count();
-        const auto output_count = 1u;
-
-        //  Declare function
-        std::vector<llvm::Type*> params{builder.getInt8PtrTy()};
-
-        for (auto i = 0u; i < input_count; ++i)
-            params.push_back(builder.getFloatTy());
-        for (auto i = 0u; i < output_count; ++i)
-            params.push_back(llvm::PointerType::getUnqual(builder.getFloatTy()));
-
-        return llvm::FunctionType::get(builder.getVoidTy(), params, false);
     }
 
     //

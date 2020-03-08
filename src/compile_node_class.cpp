@@ -1,12 +1,15 @@
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm/ADT/APFloat.h>
 #include <llvm/Support/CommandLine.h>
 
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_os_ostream.h>
+
+#include <llvm/Linker/Linker.h>
 
 #include <map>
 #include <iostream>
@@ -81,7 +84,7 @@ namespace DSPJIT {
 
     void graph_execution_context::add_module(std::unique_ptr<llvm::Module>&& module)
     {
-        _execution_engine->addModule(std::move(module));
+        _modules.emplace_back(std::move(module));
     }
 
     void graph_execution_context::compile(
@@ -99,7 +102,9 @@ namespace DSPJIT {
         if (_ack_msg_queue.dequeue(msg))
             _process_ack_msg(msg);
 
+        //  Create module and link all dependencies
         auto module = std::make_unique<Module>("MODULE", _llvm_context);
+        _link_dependency_modules(*module);
 
         /**
          *      Compile graph to LLVM IR
@@ -227,6 +232,12 @@ namespace DSPJIT {
                 LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?");
             }
         };
+    }
+
+    void graph_execution_context::_link_dependency_modules(llvm::Module& graph_module)
+    {
+        for (const auto& module : _modules)
+            llvm::Linker::linkModules(graph_module, llvm::CloneModule(*module));
     }
 
     llvm::Value *graph_execution_context::compile_node_helper(

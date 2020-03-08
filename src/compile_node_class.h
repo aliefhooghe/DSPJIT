@@ -72,7 +72,6 @@ namespace DSPJIT {
             const node_ref_vector& input_nodes,
             const node_ref_vector& output_nodes);
 
-
         /**
          *   Process Thread API
          **/
@@ -130,8 +129,11 @@ namespace DSPJIT {
 
         llvm::LLVMContext& _llvm_context;
         std::unique_ptr<llvm::ExecutionEngine> _execution_engine;
+        std::vector<std::unique_ptr<llvm::Module>> _modules{};
 
-        /* Compileling helpers */
+        /* Compiling helpers */
+        void _link_dependency_modules(llvm::Module& graph_module);
+
         llvm::Value *compile_node_helper(
             llvm::IRBuilder<>& builder,
             const compile_node_class* node,

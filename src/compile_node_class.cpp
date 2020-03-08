@@ -213,9 +213,15 @@ namespace DSPJIT {
              *      Notify process thread that a native function is ready
              **/
             _sequence++;
-            _compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func});
-            _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
-            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
+
+            if (_compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func})) {
+                _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
+                LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
+            }
+            else {
+                LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !");
+                LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?");
+            }
         };
     }
 

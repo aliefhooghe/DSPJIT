@@ -138,29 +138,32 @@ namespace DSPJIT {
 #endif
             //  Add prefix for all global names in module
             for(auto& function : *module) {
-                const auto new_name = symbol_prefix + function.getName();
 
-                if (function.getName().equals(process_func_symbol)) {
-                    if (process_func_found) {
-                        LOG_WARNING("[external_plugin] Warning : duplicate symbol %s", process_func_symbol);
-                        break;
+                if (!function.isDeclaration()) {
+                    const auto new_name = symbol_prefix + function.getName();
+
+                    if (function.getName().equals(process_func_symbol)) {
+                        if (process_func_found) {
+                            LOG_WARNING("[external_plugin] Warning : duplicate symbol %s", process_func_symbol);
+                            break;
+                        }
+
+                        process_func_found = true;
+                        _mangled_process_func_symbol = new_name.str();
+
+                        //  Check that function match an interface
+                        const auto process_func_type = function.getFunctionType();
+
+                        if (!_read_process_func_type(process_func_type)) {
+                            LOG_ERROR("[external_plugin] process function arguments does not match the required interface");
+                            throw std::runtime_error("");
+                        }
+
+                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)", _input_count, _output_count);
                     }
 
-                    process_func_found = true;
-                    _mangled_process_func_symbol = new_name.str();
-
-                    //  Check that function match an interface
-                    const auto process_func_type = function.getFunctionType();
-
-                    if (!_read_process_func_type(process_func_type)) {
-                        LOG_ERROR("[external_plugin] process function arguments does not match the required interface");
-                        throw std::runtime_error("");
-                    }
-
-                    LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)", _input_count, _output_count);
+                    function.setName(new_name);
                 }
-
-                function.setName(new_name);
             }
 
 #ifndef NDEBUG

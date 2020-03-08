@@ -1,7 +1,10 @@
 cmake_minimum_required (VERSION 3.7.0)
 project (DSPJIT)
 
-set (CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # LLVM
 # REGARDER https://github.com/llvm-mirror/llvm/tree/master/examples
@@ -23,9 +26,9 @@ find_package(Catch2 REQUIRED)
 ###----------###
 
 ## _______________
-## Graph compilation
+## DSPJIT
 
-set(SRC
+set(DSPJIT_SRC
     compile_node_class.cpp
     compile_node_class.h
     ir_helper.cpp
@@ -41,18 +44,14 @@ set(SRC
     test_implentations.cpp
     test_implentations.h)
 
-# Tests
+add_library(DSPJIT ${DSPJIT_SRC})
+target_include_directories(DSPJIT PUBLIC ${CMAKE_SOURCE_DIRECTORY})
+target_link_libraries(DSPJIT PUBLIC LLVM)
 
-add_executable(run_test test.cpp ${SRC})
-target_link_libraries(run_test LLVM)
-set_target_properties(run_test PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES)
+# Tests
+add_executable(run_test test.cpp)
+target_link_libraries(run_test DSPJIT)
 
 # Benchmarks
-
-add_executable(run_benchmark benchmark.cpp ${SRC})
-target_link_libraries(run_benchmark LLVM benchmark)
-set_target_properties(run_benchmark PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED YES)
+add_executable(run_benchmark benchmark.cpp)
+target_link_libraries(run_benchmark DSPJIT benchmark)

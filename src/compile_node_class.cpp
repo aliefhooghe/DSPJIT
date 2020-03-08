@@ -28,9 +28,12 @@ namespace DSPJIT {
     //---
 
     graph_execution_context::graph_execution_context(
+        llvm::LLVMContext& llvm_context,
         std::size_t instance_count,
+        const opt_level level,
         const llvm::TargetOptions& options)
-    :   _sequence{0u},
+    :   _llvm_context{llvm_context},
+        _sequence{0u},
         _instance_count{instance_count},
         _ack_msg_queue{3},
         _compile_done_msg_queue{3}
@@ -55,6 +58,7 @@ namespace DSPJIT {
                 llvm::EngineBuilder{std::make_unique<llvm::Module>("dummy", _llvm_context)}
                 .setEngineKind(llvm::EngineKind::JIT)
                 .setTargetOptions(options)
+                .setOptLevel(level)
                 .setMCJITMemoryManager(std::move(memory_mgr))
                 .create());
 

@@ -14,7 +14,8 @@ using namespace DSPJIT;
 
 TEST_CASE("input to output", "input_output_one_instance")
 {
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
 
     compile_node_class input{0u};
     compile_node_class output{1u};
@@ -33,7 +34,8 @@ TEST_CASE("input to output", "input_output_one_instance")
 
 TEST_CASE("output alone", "input_alone")
 {
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
 
     compile_node_class output{1u};
     context.compile({}, {output});
@@ -46,7 +48,8 @@ TEST_CASE("output alone", "input_alone")
 
 TEST_CASE("Add graph 1", "add_graph 1")
 {
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
 
     compile_node_class in1{0u}, in2{0u};
     compile_node_class out{1u};
@@ -68,7 +71,8 @@ TEST_CASE("Add graph 1", "add_graph 1")
 
 TEST_CASE("cycle state : integrator")
 {
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
 
     compile_node_class in{0u}, out{1u};
     add_compile_node add;

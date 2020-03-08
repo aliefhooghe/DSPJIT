@@ -17,7 +17,8 @@ using namespace llvm;
 static void deref_pointer_jit(benchmark::State& state)
 {
     float x = 42;
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
     reference_compile_node node{x};
     compile_node_class out{1u};
 
@@ -53,7 +54,8 @@ BENCHMARK(deref_pointer_dyn);
 
 static void add1_jit(benchmark::State& state)
 {
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
 
     compile_node_class in1{0u}, in2{0u};
     add_compile_node add{};
@@ -99,7 +101,8 @@ BENCHMARK(add1_dyn);
 
 static void affine_jit(benchmark::State& state)
 {
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
 
     compile_node_class in1{0u}, in2{0u}, in3{0u};
     add_compile_node add{};
@@ -153,7 +156,8 @@ BENCHMARK(affine_dyn);
 
 static void integrator_jit(benchmark::State& state)
 {
-    graph_execution_context context;
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
 
     compile_node_class in{0u};
     add_compile_node add{};

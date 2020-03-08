@@ -28,7 +28,8 @@ namespace DSPJIT {
         compile_node_class(
                 const unsigned int input_count,
                 std::size_t mutable_state_size_bytes = 0u);
-
+        compile_node_class(const compile_node_class&) = default;
+        compile_node_class(compile_node_class&&) = default;
         virtual ~compile_node_class() = default;
 
     protected:
@@ -52,9 +53,12 @@ namespace DSPJIT {
     public:
         friend class compile_node_class;
         using node_ref_vector = std::vector<std::reference_wrapper<compile_node_class>>;
+        using opt_level = llvm::CodeGenOpt::Level;
 
         graph_execution_context(
+            llvm::LLVMContext& llvm_context,
             std::size_t instance_num = 1u,
+            const opt_level level = opt_level::Default,
             const llvm::TargetOptions& options = llvm::TargetOptions{});
         ~graph_execution_context();
 
@@ -124,7 +128,7 @@ namespace DSPJIT {
          *   Compile Thread
          **/
 
-        llvm::LLVMContext _llvm_context{};
+        llvm::LLVMContext& _llvm_context;
         std::unique_ptr<llvm::ExecutionEngine> _execution_engine;
 
         /* Compileling helpers */

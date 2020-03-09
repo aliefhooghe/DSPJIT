@@ -187,7 +187,7 @@ namespace DSPJIT {
         }
 
 #ifndef NDEBUG
-        LOG_INFO("[graph_execution_context][compile thread] IR code before optimization");
+        LOG_DEBUG("[graph_execution_context][compile thread] IR code before optimization");
         ir_helper::print_module(*module);
 #endif
 
@@ -205,7 +205,7 @@ namespace DSPJIT {
             run_optimization(*module, *function);
 
 #ifndef NDEBUG
-            LOG_INFO("[graph_execution_context][compile thread] IR code after optimization");
+            LOG_DEBUG("[graph_execution_context][compile thread] IR code after optimization");
             ir_helper::print_module(*module);
 #endif
 

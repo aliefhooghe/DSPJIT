@@ -119,10 +119,7 @@ namespace DSPJIT {
                 throw std::runtime_error("DSPJIT : Failed to load object");
             }
 
-#ifndef NDEBUG
-        LOG_INFO("[external_plugin] Loaded module %s", obj_path.c_str());
-        ir_helper::print_module(*module);
-#endif
+            LOG_INFO("[external_plugin] Loaded module %s", obj_path.c_str());
             //  Add prefix for all global names in module
             for(auto& function : *module) {
 
@@ -152,11 +149,6 @@ namespace DSPJIT {
                     function.setName(new_name);
                 }
             }
-
-#ifndef NDEBUG
-        LOG_INFO("[external_plugin] Preprocessed module");
-        ir_helper::print_module(*module);
-#endif
 
             _modules.emplace_back(std::move(module));
         }

@@ -12,6 +12,13 @@
 using namespace llvm;
 using namespace DSPJIT;
 
+/**
+ *
+ *      Compile Node Class
+ *      Graph Execution Context
+ *
+ **/
+
 TEST_CASE("input to output", "input_output_one_instance")
 {
     LLVMContext llvm_context;
@@ -107,6 +114,12 @@ TEST_CASE("cycle state : integrator")
     context.process(&input, &output);
     REQUIRE(output == Approx(5.0f));
 }
+
+/**
+ *
+ *      ProcessNode
+ *
+ **/
 
 TEST_CASE("DYN cycle state : integrator")
 {

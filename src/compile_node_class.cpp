@@ -49,10 +49,6 @@ namespace DSPJIT {
         }
 
         //  Initialize executionEngine
-
-        /**
-         *  todo options, InitializeNativeTarget, ...,
-         **/
         auto memory_mgr =
             std::unique_ptr<llvm::RTDyldMemoryManager>(new llvm::SectionMemoryManager());
 
@@ -91,42 +87,31 @@ namespace DSPJIT {
             const node_ref_vector& input_nodes,
             const node_ref_vector& output_nodes)
     {
-        using namespace llvm;
-
         LOG_INFO("[graph_execution_context][compile thread] graph compilation");
 
-        /**
-         *      Process acq_msg : Clean unused stuff
-         **/
+        // Process acq_msg : Clean unused stuff
         ack_msg msg;
         if (_ack_msg_queue.dequeue(msg))
             _process_ack_msg(msg);
 
         //  Create module and link all dependencies
-        auto module = std::make_unique<Module>("MODULE", _llvm_context);
+        auto module = std::make_unique<llvm::Module>("MODULE", _llvm_context);
         _link_dependency_modules(*module);
 
-        /**
-         *      Compile graph to LLVM IR
-         **/
-        IRBuilder builder(_llvm_context);
+        llvm::IRBuilder builder(_llvm_context);
+        std::map<const compile_node_class*, llvm::Value*> node_values; //  Memoise nodes output values
 
-        //  Memoise nodes noutput values
-        std::map<const compile_node_class*, llvm::Value*> node_values;
-
-        // Create ir function
-
-        //  function signature : void _(int64 instance_num, float *inputs, float *outputs)
+        //  Create ir function : signature = void _(int64 instance_num, float *inputs, float *outputs)
         std::vector<llvm::Type*> arg_types{
-            Type::getInt64Ty(_llvm_context),
-            Type::getFloatPtrTy(_llvm_context),
-            Type::getFloatPtrTy(_llvm_context)};
+            llvm::Type::getInt64Ty(_llvm_context),
+            llvm::Type::getFloatPtrTy(_llvm_context),
+            llvm::Type::getFloatPtrTy(_llvm_context)};
 
-        auto func_type = FunctionType::get(Type::getVoidTy(_llvm_context), arg_types, false /* is_var_arg */);
-        auto function = Function::Create(func_type, Function::ExternalLinkage, "", module.get());
+        auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), arg_types, false /* is_var_arg */);
+        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "", module.get());
 
         //  Create function code block
-        BasicBlock *basic_block = BasicBlock::Create(_llvm_context, "", function);
+        auto basic_block = llvm::BasicBlock::Create(_llvm_context, "", function);
         builder.SetInsertPoint(basic_block);
 
         //  Get arguments
@@ -140,7 +125,7 @@ namespace DSPJIT {
         {
             auto input_index = 0u;
             for (const auto& input_node : input_nodes) {
-                auto index_value = ConstantInt::get(_llvm_context, APInt(64, input_index));
+                auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, input_index));
                 auto input_ptr =  builder.CreateGEP(inputs_array_value, index_value);
                 auto input_val = builder.CreateLoad(input_ptr);
                 node_values[&input_node.get()] = input_val;
@@ -168,6 +153,7 @@ namespace DSPJIT {
         //  Finish function by insterting a ret instruction
         builder.CreateRetVoid();
 
+        //  Remove state for nodes that are not naymore used
         {
             //  get iterator to current (last) delete sequence (map can't be empty)
             auto del_seq_it = _delete_sequences.rbegin();
@@ -192,8 +178,8 @@ namespace DSPJIT {
 #endif
 
         //  Check generated IR code
-        raw_os_ostream stream{std::cout};
-        if (verifyFunction(*function, &stream)) {
+        llvm::raw_os_ostream stream{std::cout};
+        if (llvm::verifyFunction(*function, &stream)) {
             LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation");
             //  Do not compile to native code because malformed code could lead to crash
             //  Stay at last process_func
@@ -209,29 +195,35 @@ namespace DSPJIT {
             ir_helper::print_module(*module);
 #endif
 
-            auto module_ptr = module.get();
-
-            //  Compile module to native code
-            _execution_engine->addModule(std::move(module));
-            _execution_engine->finalizeObject();
-
-            raw_func native_func =
-                reinterpret_cast<raw_func>(_execution_engine->getPointerToFunction(function));
-
-            /**
-             *      Notify process thread that a native function is ready
-             **/
-            _sequence++;
-
-            if (_compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func})) {
-                _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
-                LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
-            }
-            else {
-                LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !");
-                LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?");
-            }
+            _emit_native_code(std::move(module), function);
         };
+    }
+
+    void graph_execution_context::_emit_native_code(std::unique_ptr<llvm::Module>&& module, llvm::Function *function)
+    {
+        auto module_ptr = module.get();
+
+        //  Compile module to native code
+        _execution_engine->addModule(std::move(module));
+        _execution_engine->finalizeObject();
+
+        raw_func native_func =
+            reinterpret_cast<raw_func>(_execution_engine->getPointerToFunction(function));
+
+        /**
+         *      Notify process thread that a native function is ready
+         **/
+        _sequence++;
+
+        if (_compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func})) {
+            _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
+            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
+        }
+        else {
+            _execution_engine->removeModule(module_ptr);
+            LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !");
+            LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?");
+        }
     }
 
     void graph_execution_context::_link_dependency_modules(llvm::Module& graph_module)
@@ -248,7 +240,6 @@ namespace DSPJIT {
     {
         if (node == nullptr)
             return llvm::ConstantFP::get(builder.getContext(), llvm::APFloat(0.0f));
-
 
         const auto input_count = node->get_input_count();
         std::vector<llvm::Value*> input_values(input_count);

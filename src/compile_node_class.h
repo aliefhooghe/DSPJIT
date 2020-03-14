@@ -132,6 +132,7 @@ namespace DSPJIT {
         std::vector<std::unique_ptr<llvm::Module>> _modules{};
 
         /* Compiling helpers */
+        void _emit_native_code(std::unique_ptr<llvm::Module>&&, llvm::Function*);
         void _link_dependency_modules(llvm::Module& graph_module);
 
         llvm::Value *compile_node_helper(

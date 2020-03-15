@@ -84,11 +84,12 @@ namespace DSPJIT {
             arg_values.push_back(outputs_ptr[i]);
 
         //  Create call instruction
-        auto call_inst = builder.CreateCall(function, arg_values);
-        llvm::InlineFunctionInfo info;
+        //auto call_inst =
+        builder.CreateCall(function, arg_values);
+        // llvm::InlineFunctionInfo info;
 
-        if (!llvm::InlineFunction(call_inst, info))
-            LOG_WARNING("[external_plugin_node] Unable to inline function");
+        // if (!llvm::InlineFunction(call_inst, info))
+        //     LOG_WARNING("[external_plugin_node] Unable to inline function");
 
 
         //  Get and return Output values

@@ -39,8 +39,8 @@ namespace DSPJIT {
                     _source = nullptr;
                 }
 
-                auto get_output_id() const { return _output_id;   };
-                auto get_source()    const { return _source;      };
+                auto get_output_id() const noexcept { return _output_id;   };
+                auto get_source() const noexcept { return _source;      };
 
             private:
                 Tderived *_source{nullptr};
@@ -49,8 +49,9 @@ namespace DSPJIT {
 
 
     public:
-        node(const unsigned int input_count) :
-            _input(input_count)
+        node(unsigned int input_count, unsigned int output_count = 1u) :
+            _input(input_count),
+            _output_count(output_count)
         {}
 
         virtual ~node()
@@ -59,23 +60,45 @@ namespace DSPJIT {
             for (auto it = _users.begin(); it != _users.end(); (*it++)->unplug());
         }
 
-        void connect(Tderived& target, const unsigned int target_input)
+        void connect(Tderived& target, unsigned int target_input_id)
         {
-            if (target_input >= target.get_input_count())
-                throw std::runtime_error("Node :  connect : invalid input");
-            target._input[target_input].plug(static_cast<Tderived*>(this), 0u);
+            //  default is first output
+            connect(0u, target, target_input_id);
         }
 
-        Tderived *get_input(const unsigned int input_id) const
+        void connect(unsigned int output_id, Tderived& target, unsigned int target_input_id)
         {
+            if (target_input_id >= target.get_input_count() || output_id >= get_output_count())
+                throw std::runtime_error("Node : connect : invalid I/O");
+            target._input[target_input_id].plug(static_cast<Tderived*>(this), output_id);
+        }
+
+        Tderived *get_input(unsigned int input_id) const
+        {
+            if (input_id >= get_input_count())
+                throw std::runtime_error("Node : get_input : invalid I/O");
             return _input[input_id].get_source();
         }
 
-        const unsigned int get_input_count() const { return _input.size(); }
+        Tderived *get_input(unsigned int input_id, unsigned int &output_id) const
+        {
+            auto& input = _input[input_id];
+
+            if (input.get_source() != nullptr) {
+                output_id = input.get_output_id();
+                return input.get_source();
+            }
+
+            return nullptr;
+        }
+
+        const unsigned int get_input_count() const noexcept { return _input.size(); }
+        const unsigned int get_output_count() const noexcept { return _output_count; }
 
     private:
         std::unordered_set<input*> _users{};
         std::vector<input> _input;
+        const unsigned int _output_count;
     };
 
 

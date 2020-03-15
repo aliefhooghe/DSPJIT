@@ -81,8 +81,11 @@ namespace DSPJIT {
     private:
 
         struct mutable_node_state {
-            explicit mutable_node_state(std::size_t state_size, std::size_t instance_count)
-            :   cycle_state(instance_count, 0.f),
+            explicit mutable_node_state(
+                    std::size_t state_size,
+                    std::size_t instance_count,
+                    std::size_t output_count)
+            :   cycle_state(instance_count * output_count, 0.f),
                 data(state_size * instance_count, 0u),
                 size{state_size}
             {}
@@ -127,6 +130,10 @@ namespace DSPJIT {
          *   Compile Thread
          **/
 
+        using value_memoize_map = std::map<const compile_node_class*, std::vector<llvm::Value*>>;
+        using state_map = std::map<const compile_node_class*, mutable_node_state>;
+        using delete_sequence_map = std::map<compile_sequence_t, delete_sequence>;
+
         llvm::LLVMContext& _llvm_context;
         std::unique_ptr<llvm::ExecutionEngine> _execution_engine;
         std::vector<std::unique_ptr<llvm::Module>> _modules{};
@@ -134,12 +141,27 @@ namespace DSPJIT {
         /* Compiling helpers */
         void _emit_native_code(std::unique_ptr<llvm::Module>&&, llvm::Function*);
         void _link_dependency_modules(llvm::Module& graph_module);
+        state_map::iterator _get_node_mutable_state(const compile_node_class*);
 
-        llvm::Value *compile_node_helper(
+        llvm::Value* compile_node_value(
             llvm::IRBuilder<>& builder,
             const compile_node_class* node,
             llvm::Value *instance_num_value,
-            std::map<const compile_node_class*, llvm::Value*>& values);
+            value_memoize_map& values,
+            unsigned int output_id);
+
+        void compile_node(
+            llvm::IRBuilder<>& builder,
+            const compile_node_class* node,
+            llvm::Value *instance_num_value,
+            value_memoize_map& values,
+            std::vector<llvm::Value*>& output);
+
+        llvm::Value *get_cycle_state_ptr(
+            llvm::IRBuilder<>& builder,
+            state_map::iterator state_it,
+            llvm::Value *instance_num_value,
+            unsigned output_id, unsigned int output_count);
 
         llvm::Value *create_array_ptr(
             llvm::IRBuilder<>& builder,
@@ -150,8 +172,8 @@ namespace DSPJIT {
         /* ack msg process*/
         void _process_ack_msg(const ack_msg msg);
 
-        std::map<const compile_node_class*, mutable_node_state> _state;
-        std::map<compile_sequence_t, delete_sequence> _delete_sequences;
+        state_map _state;
+        delete_sequence_map _delete_sequences;
         compile_sequence_t _sequence;
         std::size_t _instance_count;
 

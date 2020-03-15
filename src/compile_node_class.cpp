@@ -99,7 +99,7 @@ namespace DSPJIT {
         _link_dependency_modules(*module);
 
         llvm::IRBuilder builder(_llvm_context);
-        std::map<const compile_node_class*, llvm::Value*> node_values; //  Memoise nodes output values
+        std::map<const compile_node_class*, std::vector<llvm::Value*>> node_values; //  Memoise nodes output values
 
         //  Create ir function : signature = void _(int64 instance_num, float *inputs, float *outputs)
         std::vector<llvm::Type*> arg_types{
@@ -125,11 +125,17 @@ namespace DSPJIT {
         {
             auto input_index = 0u;
             for (const auto& input_node : input_nodes) {
-                auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, input_index));
-                auto input_ptr =  builder.CreateGEP(inputs_array_value, index_value);
-                auto input_val = builder.CreateLoad(input_ptr);
-                node_values[&input_node.get()] = input_val;
-                input_index++;
+                const auto output_count = input_node.get().get_output_count();
+                std::vector<llvm::Value*> input_values{output_count};
+
+                for (auto i = 0u; i < output_count; ++i) {
+                    auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, input_index));
+                    auto input_ptr =  builder.CreateGEP(inputs_array_value, index_value);
+                    input_values[i] = builder.CreateLoad(input_ptr);
+                    input_index++;
+                }
+
+                node_values.emplace(&input_node.get(), input_values);
             }
         }
 
@@ -140,8 +146,9 @@ namespace DSPJIT {
                 const auto input_count = output_node.get().get_input_count();
 
                 for (auto i = 0u; i < input_count; ++i) {
-                    const auto dependency_node = output_node.get().get_input(i);
-                    auto value = compile_node_helper(builder, dependency_node, instance_num_value, node_values);
+                    unsigned int output_id = 0u;
+                    const auto dependency_node = output_node.get().get_input(i, output_id);
+                    auto value = compile_node_value(builder, dependency_node, instance_num_value, node_values, output_id);
                     auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, output_index));
                     auto output_ptr = builder.CreateGEP(outputs_array_value, index_value);
                     builder.CreateStore(value, output_ptr);
@@ -232,59 +239,77 @@ namespace DSPJIT {
             llvm::Linker::linkModules(graph_module, llvm::CloneModule(*module));
     }
 
-    llvm::Value *graph_execution_context::compile_node_helper(
-            llvm::IRBuilder<>& builder,
-            const compile_node_class* node,
-            llvm::Value *instance_num_value,
-            std::map<const compile_node_class*, llvm::Value*>& values)
+    graph_execution_context::state_map::iterator graph_execution_context::_get_node_mutable_state(const compile_node_class *node)
+    {
+        auto state_it = _state.find(node);
+        if (state_it == _state.end()) {
+            //  If not create state
+            auto ret = _state.emplace(node, mutable_node_state(node->mutable_state_size, _instance_count, node->get_output_count()));
+            assert(ret.second);
+            state_it = ret.first;
+        }
+        return state_it;
+    }
+
+    llvm::Value* graph_execution_context::compile_node_value(
+        llvm::IRBuilder<>& builder,
+        const compile_node_class* node,
+        llvm::Value *instance_num_value,
+        value_memoize_map& values,
+        unsigned int output_id)
     {
         if (node == nullptr)
             return llvm::ConstantFP::get(builder.getContext(), llvm::APFloat(0.0f));
 
-        const auto input_count = node->get_input_count();
-        std::vector<llvm::Value*> input_values(input_count);
+        auto value_it = values.find(node);
 
-        // Check if a state have been created for this node
-        auto state_it = _state.find(node);
-        if (state_it == _state.end()) {
-            //  If not create state
-            auto ret = _state.emplace(node, mutable_node_state(node->mutable_state_size, _instance_count));
-            assert(ret.second);
-            state_it = ret.first;
-        }
-
-        //
-        auto value_it = values.lower_bound(node);
-
-        if (value_it != values.end() && !(values.key_comp()(node, value_it->first))) {
+        if (value_it != values.end()) {
             //  This node have been visited : there is a cycle
+            auto& value_vec = value_it->second;
 
-            if (value_it->second == nullptr) {
-                //  This cycle have not been discovered : create a value with cycle state
+            //  If the cycle was not already solved
+            if (value_vec[output_id] == nullptr) {
+                auto state_it = _get_node_mutable_state(node);
+                auto cycle_ptr_value = get_cycle_state_ptr(
+                            builder, state_it, instance_num_value, output_id, node->get_output_count());
 
-                auto cycle_ptr_value =
-                    create_array_ptr(
-                        builder,
-                        ir_helper::runtime::get_raw_pointer(builder, state_it->second.cycle_state.data()),
-                        instance_num_value,
-                        sizeof(float));
-
-                value_it->second =
+                //  Store temporarly the cycle state value as output value.
+                //  It will be replaced when this node will be compiled
+                value_vec[output_id] =
                     builder.CreateLoad(ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
             }
 
-            //  Return cycle_state value
-            return value_it->second;
+            return value_vec[output_id];
         }
         else {
-            //  This node have not been visited, create a null output value
-            value_it = values.emplace_hint(value_it, node, nullptr);
+            //  This node have not been visited, create a null filled output vector
+            value_it = values.emplace_hint(value_it, node, std::vector<llvm::Value*>{node->get_output_count(), nullptr});
+
+            //  Compile node
+            compile_node(builder, node, instance_num_value, values, value_it->second);
+
+            return value_it->second[output_id];
         }
+    }
+
+    void graph_execution_context::compile_node(
+            llvm::IRBuilder<>& builder,
+            const compile_node_class* node,
+            llvm::Value *instance_num_value,
+            value_memoize_map& values,
+            std::vector<llvm::Value*>& output)
+    {
+        const auto input_count = node->get_input_count();
+        std::vector<llvm::Value*> input_values(input_count);
+        auto state_it = _get_node_mutable_state(node);
+
+        assert(output.size() == node->get_output_count());
 
         //  Compile dependencies input
         for (auto i = 0u; i < input_count; ++i) {
-            const auto *input = node->get_input(i);
-            input_values[i] = compile_node_helper(builder, input, instance_num_value, values);
+            unsigned int output_id = 0u;
+            const auto *input = node->get_input(i, output_id);
+            input_values[i] = compile_node_value(builder, input, instance_num_value, values, output_id);
         }
 
         //  get state ptr
@@ -300,34 +325,38 @@ namespace DSPJIT {
                     node->mutable_state_size);
         }
 
-        /**
-         *
-         *  TODO :      GERER LES OUTPUTS MULTIPLES !!!
-         * ########
-         *
-         **/
-
         // compile processing
         const auto output_values =
             node->emit_outputs(builder, input_values, state_ptr);
 
-        //  emit instruction to store output into cycle_state if cycle_state value was created
-        if (value_it->second != nullptr) {
-            auto cycle_ptr_value =
-                    create_array_ptr(
-                        builder,
-                        ir_helper::runtime::get_raw_pointer(builder, state_it->second.cycle_state.data()),
-                        instance_num_value,
-                        sizeof(float));
+        for (auto idx = 0u; idx < output.size(); ++idx) {
 
-            builder.CreateStore(
-                output_values[0], ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
+            //  There was a cycle for this output
+            if (output[idx] != nullptr) {
+                //  Create store instruction to cycle state
+                auto cycle_ptr_value =
+                    get_cycle_state_ptr(
+                        builder, state_it, instance_num_value, idx, output.size());
+
+                builder.CreateStore(
+                    output_values[idx], ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
+            }
+
+            // record output value
+            output[idx] = output_values[idx];
         }
-
-        // record output value
-        value_it->second = output_values[0];
-
-        return output_values[0];
+    }
+    llvm::Value *graph_execution_context::get_cycle_state_ptr(
+        llvm::IRBuilder<>& builder,
+        state_map::iterator state_it,
+        llvm::Value *instance_num_value,
+        unsigned output_id, unsigned int output_count)
+    {
+        return create_array_ptr(
+                        builder,
+                        ir_helper::runtime::get_raw_pointer(builder, state_it->second.cycle_state.data() + output_id),
+                        instance_num_value,
+                        sizeof(float) * output_count);
     }
 
     llvm::Value *graph_execution_context::create_array_ptr(

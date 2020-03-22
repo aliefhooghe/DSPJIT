@@ -23,8 +23,9 @@ namespace DSPJIT {
 
     compile_node_class::compile_node_class(
             const unsigned int input_count,
+            const unsigned int output_node,
             std::size_t mutable_state_size_bytes)
-    : node<compile_node_class>{input_count},
+    : node<compile_node_class>{input_count, output_node},
             mutable_state_size{mutable_state_size_bytes}
     {}
 

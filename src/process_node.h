@@ -12,7 +12,7 @@ namespace DSPJIT {
     class process_node : public node<process_node<Tsample>> {
     public:
         process_node(const unsigned int input_count) :
-            node<process_node<Tsample>>(input_count)
+            node<process_node<Tsample>>(input_count, 1u)
         {}
 
         virtual ~process_node() {}

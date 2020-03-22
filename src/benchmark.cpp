@@ -20,7 +20,7 @@ static void deref_pointer_jit(benchmark::State& state)
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
     reference_compile_node node{x};
-    compile_node_class out{1u};
+    compile_node_class out{1u, 0u};
 
     context.compile({}, {out});
 
@@ -57,9 +57,9 @@ static void add1_jit(benchmark::State& state)
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
 
-    compile_node_class in1{0u}, in2{0u};
+    compile_node_class in1{0u, 1u}, in2{0u, 1u};
     add_compile_node add{};
-    compile_node_class out{1u};
+    compile_node_class out{1u, 0u};
 
     in1.connect(add, 0);
     in2.connect(add, 1);
@@ -104,10 +104,10 @@ static void affine_jit(benchmark::State& state)
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
 
-    compile_node_class in1{0u}, in2{0u}, in3{0u};
+    compile_node_class in1{0u, 1u}, in2{0u, 1u}, in3{0u, 1u};
     add_compile_node add{};
     mul_compile_node mul{};
-    compile_node_class out{1u};
+    compile_node_class out{1u, 0u};
 
     in1.connect(mul, 0u);
     in2.connect(mul, 1u);
@@ -159,9 +159,9 @@ static void integrator_jit(benchmark::State& state)
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
 
-    compile_node_class in{0u};
+    compile_node_class in{0u, 1u};
     add_compile_node add{};
-    compile_node_class out{1u};
+    compile_node_class out{1u, 0u};
 
     in.connect(add, 0u);
     add.connect(add, 1u);

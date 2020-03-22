@@ -27,9 +27,10 @@ namespace DSPJIT {
     public:
         compile_node_class(
                 const unsigned int input_count,
+                const unsigned int output_count,
                 std::size_t mutable_state_size_bytes = 0u);
-        compile_node_class(const compile_node_class&) = default;
-        compile_node_class(compile_node_class&&) = default;
+        compile_node_class(const compile_node_class&) = delete;
+        compile_node_class(compile_node_class&&) = delete;
         virtual ~compile_node_class() = default;
 
     protected:

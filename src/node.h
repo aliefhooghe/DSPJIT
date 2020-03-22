@@ -49,7 +49,7 @@ namespace DSPJIT {
 
 
     public:
-        node(unsigned int input_count, unsigned int output_count = 1u) :
+        node(unsigned int input_count, unsigned int output_count) :
             _input(input_count),
             _output_count(output_count)
         {}

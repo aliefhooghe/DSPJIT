@@ -15,7 +15,7 @@ namespace DSPJIT {
 
     public:
         explicit constant_process_node(const T value) :
-            process_node<T>(0u),
+            process_node<T>{0u},
             _value{value}
         {}
 
@@ -32,7 +32,7 @@ namespace DSPJIT {
 
     public:
         explicit constant_compile_node(const float value)
-        :   compile_node_class(0u),
+        :   compile_node_class{0u, 1u},
             _value(value)
         {}
 
@@ -67,7 +67,7 @@ namespace DSPJIT {
     class reference_compile_node : public compile_node_class {
     public:
         explicit reference_compile_node(const float& ref)
-        :   compile_node_class{0u},
+        :   compile_node_class{0u, 1u},
             _ref{ref}
         {}
 
@@ -87,7 +87,7 @@ namespace DSPJIT {
 
     public:
         add_process_node() :
-            process_node<T>(2) {}
+            process_node<T>{2} {}
 
     protected:
         void process(const T *input) override
@@ -99,7 +99,7 @@ namespace DSPJIT {
     class add_compile_node : public compile_node_class {
     public:
         add_compile_node() :
-            compile_node_class{2}
+            compile_node_class{2u, 1u}
         {}
 
         std::vector<llvm::Value*> emit_outputs(
@@ -115,7 +115,7 @@ namespace DSPJIT {
 
     public:
         mul_process_node() :
-            process_node<Tsample>(2) {}
+            process_node<Tsample>{2u} {}
 
     protected:
         void process(const Tsample *input) override
@@ -127,7 +127,7 @@ namespace DSPJIT {
     class mul_compile_node : public compile_node_class {
     public:
         mul_compile_node()
-        :   compile_node_class{2}
+        :   compile_node_class{2u, 1u}
         {}
 
         std::vector<llvm::Value*> emit_outputs(
@@ -143,7 +143,7 @@ namespace DSPJIT {
 
     public:
         last_process_node(const T& initial_value) :
-            process_node<T>(1),
+            process_node<T>{1},
             _last{initial_value}
         {}
 
@@ -163,7 +163,7 @@ namespace DSPJIT {
 
     public:
         last_compile_node(const float initial_value)
-        :   compile_node_class{1, sizeof(float)},
+        :   compile_node_class{1u, 1u, sizeof(float)},
             _initial_value{initial_value}
         {}
 
@@ -188,22 +188,22 @@ namespace DSPJIT {
         }
     };
 
-    template <float unary(float)>
-    class unary_function_compile_node : public compile_node_class {
-    public:
-        unary_function_compile_node()
-        : compile_node_class{1}
-        {}
+    // template <float unary(float)>
+    // class unary_function_compile_node : public compile_node_class {
+    // public:
+    //     unary_function_compile_node()
+    //     : compile_node_class{1}
+    //     {}
 
-        std::vector<llvm::Value*> emit_outputs(
-                llvm::IRBuilder<>& builder,
-                const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override
-        {
-            //  TODO
-            return {nullptr};
-        }
-    };
+    //     std::vector<llvm::Value*> emit_outputs(
+    //             llvm::IRBuilder<>& builder,
+    //             const std::vector<llvm::Value*>& inputs,
+    //             llvm::Value *mutable_state_ptr) const override
+    //     {
+    //         //  TODO
+    //         return {nullptr};
+    //     }
+    // };
 
 
 }

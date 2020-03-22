@@ -40,10 +40,10 @@ namespace DSPJIT {
 
     external_plugin_node::external_plugin_node(
         unsigned int input_count,
-        unsigned int /*output_count*/,
+        unsigned int output_count,
         const std::string& symbol,
         std::size_t mutable_state_size)
-    :   compile_node_class{input_count, mutable_state_size},
+    :   compile_node_class{input_count, output_count, mutable_state_size},
         _symbol{symbol}
     {
     }

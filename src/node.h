@@ -73,6 +73,13 @@ namespace DSPJIT {
             target._input[target_input_id].plug(static_cast<Tderived*>(this), output_id);
         }
 
+        void disconnect(unsigned int input_id)
+        {
+            if (input_id >= get_input_count())
+                throw std::runtime_error("Node : disconnect : invalid I/O");
+            _input[input_id].unplug();
+        }
+
         Tderived *get_input(unsigned int input_id) const
         {
             if (input_id >= get_input_count())

@@ -102,20 +102,32 @@ namespace DSPJIT {
         class delete_sequence {
         public:
             explicit delete_sequence(llvm::ExecutionEngine& e, llvm::Module *m = nullptr) noexcept
-            : _engine{e},  _module{m}
+            : _engine{&e},  _module{m}
             {}
 
-            ~delete_sequence() = default;
+            ~delete_sequence()
+            {
+                if (_engine && _module) {
+                    LOG_DEBUG("[graph_execution_context][compile thread] ~delete_sequence : delete module and %u node stats\n",
+                        static_cast<unsigned int>(_node_states.size()));
+                    //  llvm execution transfert module's ownership,so we must delete it
+                    _engine->removeModule(_module);
+                    delete _module;
+                }
+            }
             delete_sequence(const delete_sequence&) = delete;
 
             delete_sequence(delete_sequence&& o) noexcept
             : _engine{o._engine}, _module{o._module}, _node_states{std::move(o._node_states)}
-            {   o._module = nullptr;    }
+            {
+                o._engine = nullptr;
+                o._module = nullptr;
+            }
 
             void add_deleted_node(mutable_node_state && state) { _node_states.emplace_back(std::move(state)); }
 
         private:
-            llvm::ExecutionEngine& _engine;
+            llvm::ExecutionEngine* _engine;
             llvm::Module *_module{nullptr};
             std::vector<mutable_node_state> _node_states;
         };

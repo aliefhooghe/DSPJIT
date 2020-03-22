@@ -166,16 +166,19 @@ namespace DSPJIT {
             //  get iterator to current (last) delete sequence (map can't be empty)
             auto del_seq_it = _delete_sequences.rbegin();
 
-            //  State management : find states that are not anymore useds
-            for (auto state_it = _state.begin(); state_it != _state.end(); ++state_it) {
+            //  State management : find states that are not anymore used
+            for (auto state_it = _state.begin(); state_it != _state.end();) {
+                //  avoid iterator invalidation
+                const auto cur_it = state_it++;
+
                 //  if this node is not used anymore
-                if (node_values.find(state_it->first) == node_values.end())
+                if (node_values.find(cur_it->first) == node_values.end())
                 {
                     //  Move the state in the delete_sequence in order to make it deleted when possible
-                    del_seq_it->second.add_deleted_node(std::move(state_it->second));
+                    del_seq_it->second.add_deleted_node(std::move(cur_it->second));
 
                     //  Remove the coresponding entry in state store
-                    _state.erase(state_it);
+                    _state.erase(cur_it);
                 }
             }
         }

@@ -18,12 +18,12 @@
 #define _END_COLOR "\033[0m"
 
 
-#define LOG_ERROR(...)      { fprintf(stdout, _BEGIN_COLOR(1, 31) "[  ERROR  ]\t" _END_COLOR __VA_ARGS__); fprintf(stdout, "\n"); }
-#define LOG_WARNING(...)    { fprintf(stdout, _BEGIN_COLOR(1, 35) "[ WARNING ]\t" _END_COLOR __VA_ARGS__); fprintf(stdout, "\n"); }
-#define LOG_INFO(...)       { fprintf(stdout, _BEGIN_COLOR(1, 32) "[  INFO   ]\t" _END_COLOR __VA_ARGS__);  fprintf(stdout, "\n"); }
+#define LOG_ERROR(...)      { fprintf(stdout, _BEGIN_COLOR(1, 31) "[  ERROR  ]\t" _END_COLOR __VA_ARGS__); }
+#define LOG_WARNING(...)    { fprintf(stdout, _BEGIN_COLOR(1, 35) "[ WARNING ]\t" _END_COLOR __VA_ARGS__); }
+#define LOG_INFO(...)       { fprintf(stdout, _BEGIN_COLOR(1, 32) "[  INFO   ]\t" _END_COLOR __VA_ARGS__); }
 
 #ifndef NDEBUG
-#define LOG_DEBUG(...)      { fprintf(stdout, _BEGIN_COLOR(1, 34) "[  DEBUG  ]\t" _END_COLOR __VA_ARGS__); fprintf(stdout, "\n"); }
+#define LOG_DEBUG(...)      { fprintf(stdout, _BEGIN_COLOR(1, 34) "[  DEBUG  ]\t" _END_COLOR __VA_ARGS__); }
 #else
 #define LOG_DEBUG(...) {  }
 #endif

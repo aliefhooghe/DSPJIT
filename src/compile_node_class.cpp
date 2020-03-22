@@ -88,7 +88,7 @@ namespace DSPJIT {
             const node_ref_vector& input_nodes,
             const node_ref_vector& output_nodes)
     {
-        LOG_INFO("[graph_execution_context][compile thread] graph compilation");
+        LOG_INFO("[graph_execution_context][compile thread] graph compilation\n");
 
         // Process acq_msg : Clean unused stuff
         ack_msg msg;
@@ -180,15 +180,15 @@ namespace DSPJIT {
             }
         }
 
-#ifndef NDEBUG
-        LOG_DEBUG("[graph_execution_context][compile thread] IR code before optimization");
+#ifdef GAMMOU_PRINT_IR
+        LOG_DEBUG("[graph_execution_context][compile thread] IR code before optimization\n");
         ir_helper::print_module(*module);
 #endif
 
         //  Check generated IR code
         llvm::raw_os_ostream stream{std::cout};
         if (llvm::verifyFunction(*function, &stream)) {
-            LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation");
+            LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation\n");
             //  Do not compile to native code because malformed code could lead to crash
             //  Stay at last process_func
         }
@@ -198,8 +198,8 @@ namespace DSPJIT {
              **/
             run_optimization(*module, *function);
 
-#ifndef NDEBUG
-            LOG_DEBUG("[graph_execution_context][compile thread] IR code after optimization");
+#ifdef GAMMOU_PRINT_IR
+            LOG_DEBUG("[graph_execution_context][compile thread] IR code after optimization\n");
             ir_helper::print_module(*module);
 #endif
 
@@ -225,12 +225,12 @@ namespace DSPJIT {
 
         if (_compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func})) {
             _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
-            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)", _sequence);
+            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)\n", _sequence);
         }
         else {
             _execution_engine->removeModule(module_ptr);
-            LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !");
-            LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?");
+            LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !\n");
+            LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?\n");
         }
     }
 
@@ -274,7 +274,7 @@ namespace DSPJIT {
                 auto cycle_ptr_value = get_cycle_state_ptr(
                             builder, state_it, instance_num_value, output_id, node->get_output_count());
 
-                //  Store temporarly the cycle state value as output value.
+                //  Store temporarily the cycle state value as output value.
                 //  It will be replaced when this node will be compiled
                 value_vec[output_id] =
                     builder.CreateLoad(ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
@@ -389,7 +389,7 @@ namespace DSPJIT {
 
     void graph_execution_context::_process_ack_msg(const ack_msg msg)
     {
-        LOG_DEBUG("[graph_execution_context][compile thread] received acknowledgment from process thread (seq = %u)", msg);
+        LOG_DEBUG("[graph_execution_context][compile thread] received acknowledgment from process thread (seq = %u)\n", msg);
 
         //  Erase all previous delete_sequence
         _delete_sequences.erase(
@@ -399,7 +399,7 @@ namespace DSPJIT {
 
     void graph_execution_context::_process_compile_done_msg(const compile_done_msg msg)
     {
-        LOG_DEBUG("[graph_execution_context][process thread] received compile done from compile thread (seq = %u). Send acknoledgment to compile thread", msg.first);
+        LOG_DEBUG("[graph_execution_context][process thread] received compile done from compile thread (seq = %u). Send acknowledgment to compile thread\n", msg.first);
         //  Use the new process func
         _process_func = msg.second;
 

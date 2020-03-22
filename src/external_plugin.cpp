@@ -1,4 +1,3 @@
-
 #include <sstream>
 
 #include <llvm/IRReader/IRReader.h>
@@ -60,7 +59,7 @@ namespace DSPJIT {
         auto function = module->getFunction(_symbol);
 
         if (function == nullptr) {
-            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup", _symbol.c_str())
+            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", _symbol.c_str())
             throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
         }
 
@@ -116,11 +115,11 @@ namespace DSPJIT {
 
             auto module = llvm::parseIRFile(obj_path, error, llvm_context);
             if (!module) {
-                LOG_ERROR("[external_plugin] Cannot load object %s", obj_path.c_str());
+                LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path.c_str());
                 throw std::runtime_error("DSPJIT : Failed to load object");
             }
 
-            LOG_INFO("[external_plugin] Loaded module %s", obj_path.c_str());
+            LOG_INFO("[external_plugin] Loaded module %s\n", obj_path.c_str());
             //  Add prefix for all global names in module
             for(auto& function : *module) {
 
@@ -129,7 +128,7 @@ namespace DSPJIT {
 
                     if (function.getName().equals(process_func_symbol)) {
                         if (process_func_found) {
-                            LOG_WARNING("[external_plugin] Warning : duplicate symbol %s", process_func_symbol);
+                            LOG_WARNING("[external_plugin] Warning : duplicate symbol %s\n", process_func_symbol);
                             break;
                         }
 
@@ -140,11 +139,11 @@ namespace DSPJIT {
                         const auto process_func_type = function.getFunctionType();
 
                         if (!_read_process_func_type(process_func_type)) {
-                            LOG_ERROR("[external_plugin] process function arguments does not match the required interface");
+                            LOG_ERROR("[external_plugin] process function arguments does not match the required interface\n");
                             throw std::runtime_error("");
                         }
 
-                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)", _input_count, _output_count);
+                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)\n", _input_count, _output_count);
                     }
 
                     function.setName(new_name);
@@ -155,7 +154,7 @@ namespace DSPJIT {
         }
 
         if (!process_func_found) {
-            LOG_ERROR("[external_plugin] Symbol '%s' not found in plugin", process_func_symbol);
+            LOG_ERROR("[external_plugin] Symbol '%s' not found in plugin\n", process_func_symbol);
             throw std::runtime_error("DSPJIT : external_plugin : symbol not found");
         }
     }

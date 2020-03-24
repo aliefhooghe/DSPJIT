@@ -53,7 +53,7 @@ namespace DSPJIT {
         llvm::Value *mutable_state_ptr) const
     {
         const auto input_count = get_input_count();
-        const auto output_count = 1u;
+        const auto output_count = get_output_count();
 
         auto module = builder.GetInsertBlock()->getModule();
         auto function = module->getFunction(_symbol);

@@ -104,7 +104,7 @@ namespace DSPJIT {
 
     external_plugin::external_plugin(
         llvm::LLVMContext &llvm_context,
-        const std::vector<std::string>& code_object_paths,
+        const std::vector<std::filesystem::path>& code_object_paths,
         const std::size_t mutable_state_size)
     :   _mutable_state_size{mutable_state_size}
     {
@@ -115,7 +115,7 @@ namespace DSPJIT {
         for (const auto& obj_path : code_object_paths) {
             llvm::SMDiagnostic error;
 
-            auto module = llvm::parseIRFile(obj_path, error, llvm_context);
+            auto module = llvm::parseIRFile(obj_path.c_str(), error, llvm_context);
             if (!module) {
                 LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path.c_str());
                 throw std::runtime_error("DSPJIT : Failed to load object");

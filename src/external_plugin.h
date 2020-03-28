@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include "compile_node_class.h"
 
@@ -20,7 +21,7 @@ namespace DSPJIT {
     public:
         explicit external_plugin(
             llvm::LLVMContext &llvm_context,
-            const std::vector<std::string>& code_object_paths,
+            const std::vector<std::filesystem::path>& code_object_paths,
             const std::size_t mutable_state_size = 0u);
 
         external_plugin(const external_plugin&) = delete;
@@ -32,6 +33,12 @@ namespace DSPJIT {
          *
          **/
         std::unique_ptr<compile_node_class> create_node() const;
+
+        /*
+         *
+         */
+        const auto get_input_count() const noexcept { return _input_count; }
+        const auto get_output_count() const noexcept { return _output_count; }
 
     private:
         bool _read_process_func_type(const llvm::FunctionType*);

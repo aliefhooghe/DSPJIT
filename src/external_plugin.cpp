@@ -3,6 +3,7 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/Linker/Linker.h>
 
 #include "external_plugin.h"
 #include "ir_helper.h"
@@ -109,6 +110,7 @@ namespace DSPJIT {
     {
         const auto symbol_prefix = "plugin__" + ptr_2_string(this) + "__";
         bool process_func_found = false;
+        std::vector<std::unique_ptr<llvm::Module>> modules;
 
         for (const auto& obj_path : code_object_paths) {
             llvm::SMDiagnostic error;
@@ -150,20 +152,26 @@ namespace DSPJIT {
                 }
             }
 
-            _modules.emplace_back(std::move(module));
+            modules.emplace_back(std::move(module));
         }
 
         if (!process_func_found) {
             LOG_ERROR("[external_plugin] Symbol '%s' not found in plugin\n", process_func_symbol);
             throw std::runtime_error("DSPJIT : external_plugin : symbol not found");
         }
+
+        //  link all modules together
+        const auto module_count = modules.size();
+
+        for (auto i = 1u; i < module_count; ++i)
+            llvm::Linker::linkModules(*(modules[0]), std::move(modules[i]));
+
+        _module = std::move(modules[0]);
     }
 
-    void external_plugin::prepare_context(graph_execution_context& context)
+    std::unique_ptr<llvm::Module> external_plugin::module()
     {
-        //  Add every needed module to the executinon context
-        for (const auto& module : _modules)
-            context.add_module(llvm::CloneModule(*module));
+        return llvm::CloneModule(*_module);
     }
 
     std::unique_ptr<compile_node_class> external_plugin::create_node() const

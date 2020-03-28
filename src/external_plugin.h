@@ -26,10 +26,7 @@ namespace DSPJIT {
         external_plugin(const external_plugin&) = delete;
         external_plugin(external_plugin &&) = default;
 
-        /**
-         *
-         **/
-        void prepare_context(graph_execution_context& context);
+        std::unique_ptr<llvm::Module> module();
 
         /**
          *
@@ -39,13 +36,11 @@ namespace DSPJIT {
     private:
         bool _read_process_func_type(const llvm::FunctionType*);
 
-        using module_vector = std::vector<std::unique_ptr<llvm::Module>>;
-
         const std::size_t _mutable_state_size;
         unsigned int _input_count;
         unsigned int _output_count;
         std::string _mangled_process_func_symbol;
-        module_vector _modules{};
+        std::unique_ptr<llvm::Module> _module{};
     };
 
 }

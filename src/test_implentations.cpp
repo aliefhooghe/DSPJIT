@@ -25,7 +25,7 @@ namespace DSPJIT {
                 const std::vector<llvm::Value*>& inputs,
                 llvm::Value *mutable_state_ptr) const
     {
-        return {ir_helper::runtime::create_load(builder, &_ref)};
+        return {ir_helper::runtime::create_load(builder, _ref)};
     }
 
     // Add

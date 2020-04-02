@@ -66,7 +66,7 @@ namespace DSPJIT {
 
     class reference_compile_node : public compile_node_class {
     public:
-        explicit reference_compile_node(const float& ref)
+        explicit reference_compile_node(const float* ref)
         :   compile_node_class{0u, 1u},
             _ref{ref}
         {}
@@ -77,7 +77,7 @@ namespace DSPJIT {
                 llvm::Value *mutable_state_ptr) const override;
 
     private:
-        const float& _ref;
+        const float* _ref;
     };
 
     // Add

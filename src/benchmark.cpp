@@ -19,7 +19,7 @@ static void deref_pointer_jit(benchmark::State& state)
     float x = 42;
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
-    reference_compile_node node{x};
+    reference_compile_node node{&x};
     compile_node_class out{1u, 0u};
 
     context.compile({}, {out});

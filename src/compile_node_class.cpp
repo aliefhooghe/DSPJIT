@@ -199,7 +199,7 @@ namespace DSPJIT {
             /**
              *      Compile LLVM IR to native code
              **/
-            run_optimization(*module, *function);
+            run_optimization(*module);
 
 #ifdef GAMMOU_PRINT_IR
             LOG_DEBUG("[graph_execution_context][compile thread] IR code after optimization\n");

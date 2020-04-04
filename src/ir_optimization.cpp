@@ -1,31 +1,27 @@
 
-#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/IRBuilder.h"
-
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
-#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
-
-#include "llvm/Support/TargetSelect.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils.h"
+#include "llvm/Transforms/IPO.h"
 
 #include "ir_optimization.h"
+#include "log.h"
 
 namespace DSPJIT {
 
-    void run_optimization(llvm::Module& m, llvm::Function& func)
+    void run_optimization(llvm::Module& m)
     {
-        llvm::legacy::FunctionPassManager pm{&m};
-        llvm::PassManagerBuilder pm_builder{};
-
-        pm_builder.OptLevel = 3;
-        pm_builder.populateFunctionPassManager(pm);
-
-        pm.doInitialization();
-        pm.run(func);
-        pm.doFinalization();
+        llvm::legacy::PassManager pm{};
+        pm.add(llvm::createFunctionInliningPass());
+        pm.add(llvm::createReassociatePass());
+        pm.add(llvm::createConstantPropagationPass());
+        pm.add(llvm::createAggressiveDCEPass());
+        pm.add(llvm::createDeadCodeEliminationPass());
+        pm.add(llvm::createPromoteMemoryToRegisterPass());
+        pm.run(m);
     }
 
 }

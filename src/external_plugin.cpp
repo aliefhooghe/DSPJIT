@@ -84,13 +84,7 @@ namespace DSPJIT {
             arg_values.push_back(outputs_ptr[i]);
 
         //  Create call instruction
-        //auto call_inst =
         builder.CreateCall(function, arg_values);
-        // llvm::InlineFunctionInfo info;
-
-        // if (!llvm::InlineFunction(call_inst, info))
-        //     LOG_WARNING("[external_plugin_node] Unable to inline function");
-
 
         //  Get and return Output values
         std::vector<llvm::Value*> output_values{output_count};
@@ -113,18 +107,17 @@ namespace DSPJIT {
         std::vector<std::unique_ptr<llvm::Module>> modules;
 
         for (const auto& obj_path : code_object_paths) {
+            //  Load the module object from file
             llvm::SMDiagnostic error;
-
             auto module = llvm::parseIRFile(obj_path.c_str(), error, llvm_context);
             if (!module) {
                 LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path.c_str());
                 throw std::runtime_error("DSPJIT : Failed to load object");
             }
-
             LOG_INFO("[external_plugin] Loaded module %s\n", obj_path.c_str());
-            //  Add prefix for all global names in module
-            for(auto& function : *module) {
 
+            for(auto& function : *module) {
+                //  Ingore declaration (there are typically libs functions)
                 if (!function.isDeclaration()) {
                     const auto new_name = symbol_prefix + function.getName();
 
@@ -137,18 +130,22 @@ namespace DSPJIT {
                         process_func_found = true;
                         _mangled_process_func_symbol = new_name.str();
 
-                        //  Check that function match an interface
-                        const auto process_func_type = function.getFunctionType();
-
-                        if (!_read_process_func_type(process_func_type)) {
+                        //  Check that function match needed interface
+                        if (_read_process_func_type(function.getFunctionType())) {
+                            LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)\n", _input_count, _output_count);
+                        }
+                        else {
                             LOG_ERROR("[external_plugin] process function arguments does not match the required interface\n");
                             throw std::runtime_error("");
                         }
-
-                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)\n", _input_count, _output_count);
                     }
 
+                    //  Rename the function in order to isolate this plugin's functions in a namespace
                     function.setName(new_name);
+
+                    //  Remove all function attributes as they can prevent optimization such as inlining
+                    function.setAttributes(
+                        llvm::AttributeList::get(llvm_context, llvm::ArrayRef<llvm::AttributeList>{}));
                 }
             }
 

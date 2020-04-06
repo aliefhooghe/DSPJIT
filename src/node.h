@@ -7,7 +7,7 @@
 
 namespace DSPJIT {
 
-    template <typename Tderived>
+    template <typename Derived>
     class node {
 
         class input {
@@ -22,7 +22,7 @@ namespace DSPJIT {
                     unplug();
                 }
 
-                void plug(Tderived* n, unsigned int output_id)
+                void plug(Derived* n, unsigned int output_id)
                 {
                     unplug();
                     _source = n;
@@ -43,7 +43,7 @@ namespace DSPJIT {
                 auto get_source() const noexcept { return _source;      };
 
             private:
-                Tderived *_source{nullptr};
+                Derived *_source{nullptr};
                 unsigned int _output_id{0u};
         };
 
@@ -60,17 +60,17 @@ namespace DSPJIT {
             for (auto it = _users.begin(); it != _users.end(); (*it++)->unplug());
         }
 
-        void connect(Tderived& target, unsigned int target_input_id)
+        void connect(Derived& target, unsigned int target_input_id)
         {
             //  default is first output
             connect(0u, target, target_input_id);
         }
 
-        void connect(unsigned int output_id, Tderived& target, unsigned int target_input_id)
+        void connect(unsigned int output_id, Derived& target, unsigned int target_input_id)
         {
             if (target_input_id >= target.get_input_count() || output_id >= get_output_count())
                 throw std::runtime_error("Node : connect : invalid I/O");
-            target._input[target_input_id].plug(static_cast<Tderived*>(this), output_id);
+            target._input[target_input_id].plug(static_cast<Derived*>(this), output_id);
         }
 
         void disconnect(unsigned int input_id)
@@ -80,14 +80,14 @@ namespace DSPJIT {
             _input[input_id].unplug();
         }
 
-        Tderived *get_input(unsigned int input_id) const
+        Derived *get_input(unsigned int input_id) const
         {
             if (input_id >= get_input_count())
                 throw std::runtime_error("Node : get_input : invalid I/O");
             return _input[input_id].get_source();
         }
 
-        Tderived *get_input(unsigned int input_id, unsigned int &output_id) const
+        Derived *get_input(unsigned int input_id, unsigned int &output_id) const
         {
             auto& input = _input[input_id];
 
@@ -107,8 +107,6 @@ namespace DSPJIT {
         std::vector<input> _input;
         const unsigned int _output_count;
     };
-
-
 
 }
 

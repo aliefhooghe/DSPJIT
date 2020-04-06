@@ -53,7 +53,6 @@ TEST_CASE("Node Conection", "node_connection")
     REQUIRE(n3.get_input(1u) == nullptr);
 }
 
-
 /**
  *
  *      Compile Node Class
@@ -72,6 +71,7 @@ TEST_CASE("input to output", "input_output_one_instance")
     input.connect(output, 0u);
 
     context.compile({input}, {output});
+    context.update_program();
 
     const float in = 42.0f;
     float out = 0.0f;
@@ -88,6 +88,7 @@ TEST_CASE("output alone", "input_alone")
 
     compile_node_class output{1u, 0u};
     context.compile({}, {output});
+    context.update_program();
 
     float out = 42.0f;
     context.process(nullptr, &out);
@@ -109,6 +110,7 @@ TEST_CASE("Add graph 1", "add_graph 1")
     add.connect(out, 0u);
 
     context.compile({in1, in2}, {out});
+    context.update_program();
 
     const float input[2] = {1.f, 10.f};
     float output = 0.f;
@@ -131,6 +133,7 @@ TEST_CASE("cycle state : integrator")
     add.connect(out, 0u);
 
     context.compile({in}, {out});
+    context.update_program();
 
     const float input = 1.0f;
     float output = 0.0f;
@@ -143,6 +146,7 @@ TEST_CASE("cycle state : integrator")
 
     //  Recompilation
     context.compile({in}, {out});
+    context.update_program();
 
     context.process(&input, &output);
     REQUIRE(output == Approx(3.0f));
@@ -152,6 +156,7 @@ TEST_CASE("cycle state : integrator")
 
     //  Recompilation again
     context.compile({in}, {out});
+    context.update_program();
 
     context.process(&input, &output);
     REQUIRE(output == Approx(5.0f));

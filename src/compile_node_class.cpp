@@ -39,8 +39,8 @@ namespace DSPJIT {
     :   _llvm_context{llvm_context},
         _sequence{0u},
         _instance_count{instance_count},
-        _ack_msg_queue{3},
-        _compile_done_msg_queue{3}
+        _ack_msg_queue{256},
+        _compile_done_msg_queue{256}
     {
         static auto llvm_native_was_init = false;
         if (llvm_native_was_init == false) {
@@ -62,9 +62,6 @@ namespace DSPJIT {
                 .setMCJITMemoryManager(std::move(memory_mgr))
                 .create());
 
-        //  Default native function does nothing
-        _process_func = default_process_func;
-
         //  Create the associated delete_sequence
         _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine});
     }
@@ -85,8 +82,8 @@ namespace DSPJIT {
     }
 
     void graph_execution_context::compile(
-            const node_ref_vector& input_nodes,
-            const node_ref_vector& output_nodes)
+            node_ref_list input_nodes,
+            node_ref_list output_nodes)
     {
         LOG_INFO("[graph_execution_context][compile thread] graph compilation\n");
 
@@ -95,13 +92,54 @@ namespace DSPJIT {
         if (_ack_msg_queue.dequeue(msg))
             _process_ack_msg(msg);
 
-        //  Create module and link all dependencies
-        auto module = std::make_unique<llvm::Module>("MODULE", _llvm_context);
+        //  Create module and link all dependencies into it
+        auto module = std::make_unique<llvm::Module>("GRAPH_EXECUTION_CONTEXT", _llvm_context);
         _link_dependency_modules(*module);
 
-        llvm::IRBuilder builder(_llvm_context);
-        std::map<const compile_node_class*, std::vector<llvm::Value*>> node_values; //  Memoise nodes output values
+        value_memoize_map node_values{}; //  Memoise nodes output values
 
+        //  Compile process function
+        auto process_function =
+            _compile_process_function(
+                input_nodes,
+                output_nodes,
+                node_values,
+                *module);
+
+        //  Remove state for nodes that are not anymore used
+        _collect_unused_states(node_values);
+
+#ifdef GAMMOU_PRINT_IR
+        LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
+        ir_helper::print_module(*module);
+#endif
+
+        //  Check generated IR code
+        llvm::raw_os_ostream stream{std::cout};
+        if (llvm::verifyFunction(*process_function, &stream)) {
+            LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation\n");
+            //  Do not compile to native code because malformed code could lead to crash
+            //  Stay at last process_func
+            return;
+        }
+
+        run_optimization(*module);
+
+#ifdef GAMMOU_PRINT_IR
+        LOG_INFO("[graph_execution_context][compile thread] IR code after optimization\n");
+        ir_helper::print_module(*module);
+#endif
+
+        //  Compile LLVM IR to native code
+        _emit_native_code(std::move(module), process_function);
+    }
+
+    llvm::Function * graph_execution_context::_compile_process_function(
+        node_ref_list input_nodes,
+        node_ref_list output_nodes,
+        value_memoize_map& node_values,
+        llvm::Module& graph_module)
+    {
         //  Create ir function : signature = void _(int64 instance_num, float *inputs, float *outputs)
         std::vector<llvm::Type*> arg_types{
             llvm::Type::getInt64Ty(_llvm_context),
@@ -109,10 +147,12 @@ namespace DSPJIT {
             llvm::Type::getFloatPtrTy(_llvm_context)};
 
         auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), arg_types, false /* is_var_arg */);
-        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "", module.get());
+        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "", &graph_module);
 
         //  Create function code block
         auto basic_block = llvm::BasicBlock::Create(_llvm_context, "", function);
+
+        llvm::IRBuilder builder(_llvm_context);
         builder.SetInsertPoint(basic_block);
 
         //  Get arguments
@@ -122,125 +162,123 @@ namespace DSPJIT {
         auto outputs_array_value = arg_begin++;
 
         //  generate code that load inputs from input array and
-        //  register input_nodes output as value. (for now 1 output per node)
-        {
-            auto input_index = 0u;
-            for (const auto& input_node : input_nodes) {
-                const auto output_count = input_node.get().get_output_count();
-                std::vector<llvm::Value*> input_values{output_count};
-
-                for (auto i = 0u; i < output_count; ++i) {
-                    auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, input_index));
-                    auto input_ptr =  builder.CreateGEP(inputs_array_value, index_value);
-                    input_values[i] = builder.CreateLoad(input_ptr);
-                    input_index++;
-                }
-
-                node_values.emplace(&input_node.get(), input_values);
-            }
-        }
+        //  register input_nodes output as value.
+        _load_graph_input_values(
+            builder, input_nodes, inputs_array_value, node_values);
 
         //  Compute output_nodes inputs and store them to output array
-        {
-            auto output_index = 0u;
-            for (const auto& output_node : output_nodes) {
-                const auto input_count = output_node.get().get_input_count();
-
-                for (auto i = 0u; i < input_count; ++i) {
-                    unsigned int output_id = 0u;
-                    const auto dependency_node = output_node.get().get_input(i, output_id);
-                    auto value = compile_node_value(builder, dependency_node, instance_num_value, node_values, output_id);
-                    auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, output_index));
-                    auto output_ptr = builder.CreateGEP(outputs_array_value, index_value);
-                    builder.CreateStore(value, output_ptr);
-                    output_index++;
-                }
-            }
-        }
+        _compile_and_store_graph_output_values(
+            builder, output_nodes, outputs_array_value, instance_num_value, node_values);
 
         //  Finish function by insterting a ret instruction
         builder.CreateRetVoid();
 
-        //  Remove state for nodes that are not naymore used
-        {
-            //  get iterator to current (last) delete sequence (map can't be empty)
-            auto del_seq_it = _delete_sequences.rbegin();
-
-            //  State management : find states that are not anymore used
-            for (auto state_it = _state.begin(); state_it != _state.end();) {
-                //  avoid iterator invalidation
-                const auto cur_it = state_it++;
-
-                //  if this node is not used anymore
-                if (node_values.find(cur_it->first) == node_values.end())
-                {
-                    //  Move the state in the delete_sequence in order to make it deleted when possible
-                    del_seq_it->second.add_deleted_node(std::move(cur_it->second));
-
-                    //  Remove the coresponding entry in state store
-                    _state.erase(cur_it);
-                }
-            }
-        }
-
-#ifdef GAMMOU_PRINT_IR
-        LOG_DEBUG("[graph_execution_context][compile thread] IR code before optimization\n");
-        ir_helper::print_module(*module);
-#endif
-
-        //  Check generated IR code
-        llvm::raw_os_ostream stream{std::cout};
-        if (llvm::verifyFunction(*function, &stream)) {
-            LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation\n");
-            //  Do not compile to native code because malformed code could lead to crash
-            //  Stay at last process_func
-        }
-        else {
-            /**
-             *      Compile LLVM IR to native code
-             **/
-            run_optimization(*module);
-
-#ifdef GAMMOU_PRINT_IR
-            LOG_DEBUG("[graph_execution_context][compile thread] IR code after optimization\n");
-            ir_helper::print_module(*module);
-#endif
-
-            _emit_native_code(std::move(module), function);
-        };
+        return function;
     }
 
-    void graph_execution_context::_emit_native_code(std::unique_ptr<llvm::Module>&& module, llvm::Function *function)
+    llvm::Function *graph_execution_context::_compile_initialize_function(
+        node_ref_list input_nodes,
+        value_memoize_map& node_values,
+        llvm::Module& graph_module)
     {
-        auto module_ptr = module.get();
+        auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), {llvm::Type::getInt64Ty(_llvm_context)}, false);
+        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "", &graph_module);
+        auto instance_num_value = function->arg_begin();
+        auto basic_block = llvm::BasicBlock::Create(_llvm_context, "", function);
 
-        //  Compile module to native code
-        _execution_engine->addModule(std::move(module));
-        _execution_engine->finalizeObject();
+        llvm::IRBuilder builder(_llvm_context);
+        builder.SetInsertPoint(basic_block);
 
-        raw_func native_func =
-            reinterpret_cast<raw_func>(_execution_engine->getPointerToFunction(function));
+        //  for each node that have been used in the last compilation
+        for (const auto& [node, val] : node_values) {
+            if (std::any_of(
+                    input_nodes.begin(), input_nodes.end(),
+                    [ptr = node](const auto& in) { return &(in.get()) == ptr; }))
+            {
+                //  Ignore input nodes as they are not used for computation
+                continue;
+            }
 
-        /**
-         *      Notify process thread that a native function is ready
-         **/
-        _sequence++;
-
-        if (_compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func})) {
-            _delete_sequences.emplace(_sequence, delete_sequence{*_execution_engine, module_ptr});
-            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)\n", _sequence);
+            // node->initialize_mutable_state(
+            //     builder, );
         }
-        else {
-            _execution_engine->removeModule(module_ptr);
-            LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !\n");
-            LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?\n");
-        }
+
+        builder.CreateRetVoid();
+        return function;
     }
 
     void graph_execution_context::_link_dependency_modules(llvm::Module& graph_module)
     {
         for (const auto& module : _modules)
             llvm::Linker::linkModules(graph_module, llvm::CloneModule(*module));
+    }
+
+    void graph_execution_context::_load_graph_input_values(
+        llvm::IRBuilder<>& builder,
+        node_ref_list input_nodes,
+        llvm::Argument *input_array,
+        value_memoize_map& values)
+    {
+        auto input_index = 0u;
+
+        for (const auto &input_node : input_nodes) {
+            const auto output_count = input_node.get().get_output_count();
+            std::vector<llvm::Value *> input_values{output_count};
+
+            for (auto i = 0u; i < output_count; ++i) {
+                auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, input_index));
+                auto input_ptr = builder.CreateGEP(input_array, index_value);
+                input_values[i] = builder.CreateLoad(input_ptr);
+                input_index++;
+            }
+
+            values.emplace(&input_node.get(), input_values);
+        }
+    }
+
+    void graph_execution_context::_compile_and_store_graph_output_values(
+            llvm::IRBuilder<>& builder,
+            node_ref_list output_nodes,
+            llvm::Argument *output_array,
+            llvm::Value *instance_num,
+            value_memoize_map& values)
+    {
+        auto output_index = 0u;
+        for (const auto& output_node : output_nodes) {
+            const auto input_count = output_node.get().get_input_count();
+
+            for (auto i = 0u; i < input_count; ++i) {
+                unsigned int output_id = 0u;
+                const auto dependency_node = output_node.get().get_input(i, output_id);
+                auto value = compile_node_value(builder, dependency_node, instance_num, values, output_id);
+                auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, output_index));
+                auto output_ptr = builder.CreateGEP(output_array, index_value);
+                builder.CreateStore(value, output_ptr);
+                output_index++;
+            }
+        }
+    }
+
+    void graph_execution_context::_collect_unused_states(value_memoize_map& values)
+    {
+        //  get iterator to current (last) delete sequence (map can't be empty)
+        auto del_seq_it = _delete_sequences.rbegin();
+
+        //  State management : find states that are not anymore used
+        for (auto state_it = _state.begin(); state_it != _state.end();) {
+            //  avoid iterator invalidation
+            const auto cur_it = state_it++;
+
+            //  if this node is not used anymore
+            if (values.find(cur_it->first) == values.end())
+            {
+                //  Move the state in the delete_sequence in order to make it deleted when possible
+                del_seq_it->second.add_deleted_node(std::move(cur_it->second));
+
+                //  Remove the coresponding entry in state store
+                _state.erase(cur_it);
+            }
+        }
     }
 
     graph_execution_context::state_map::iterator graph_execution_context::_get_node_mutable_state(const compile_node_class *node)
@@ -263,7 +301,9 @@ namespace DSPJIT {
         unsigned int output_id)
     {
         if (node == nullptr)
-            return llvm::ConstantFP::get(builder.getContext(), llvm::APFloat(0.0f));
+            return llvm::ConstantFP::get(
+                builder.getContext(),
+                llvm::APFloat::getZero(llvm::APFloat::IEEEsingle()));
 
         auto value_it = values.find(node);
 
@@ -274,13 +314,12 @@ namespace DSPJIT {
             //  If the cycle was not already solved
             if (value_vec[output_id] == nullptr) {
                 auto state_it = _get_node_mutable_state(node);
-                auto cycle_ptr_value = get_cycle_state_ptr(
+                auto cycle_ptr = get_cycle_state_ptr(
                             builder, state_it, instance_num_value, output_id, node->get_output_count());
 
                 //  Store temporarily the cycle state value as output value.
                 //  It will be replaced when this node will be compiled
-                value_vec[output_id] =
-                    builder.CreateLoad(ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
+                value_vec[output_id] = builder.CreateLoad(cycle_ptr);
             }
 
             return value_vec[output_id];
@@ -321,12 +360,17 @@ namespace DSPJIT {
 
         if (node->mutable_state_size != 0u) {
             // state_ptr <- base + instance_num * state size
+
             state_ptr =
-                create_array_ptr(
-                    builder,
-                    ir_helper::runtime::get_raw_pointer(builder, state_it->second.data.data()),
-                    instance_num_value,
-                    node->mutable_state_size);
+                builder.CreateGEP(
+                    builder.CreateIntToPtr(
+                        llvm::ConstantInt::get(
+                            builder.getIntNTy(sizeof(uint8_t*) * 8),
+                            reinterpret_cast<intptr_t>(state_it->second.data.data())),
+                        builder.getInt8PtrTy()),
+                    builder.CreateMul(
+                        instance_num_value,
+                        llvm::ConstantInt::get(builder.getInt64Ty(), node->mutable_state_size)));
         }
 
         // compile processing
@@ -338,57 +382,86 @@ namespace DSPJIT {
             //  There was a cycle for this output
             if (output[idx] != nullptr) {
                 //  Create store instruction to cycle state
-                auto cycle_ptr_value =
+                auto cycle_ptr =
                     get_cycle_state_ptr(
                         builder, state_it, instance_num_value, idx, output.size());
 
-                builder.CreateStore(
-                    output_values[idx], ir_helper::runtime::raw2typed_ptr<float>(builder, cycle_ptr_value));
+                builder.CreateStore(output_values[idx], cycle_ptr);
             }
 
             // record output value
             output[idx] = output_values[idx];
         }
     }
+
+    void graph_execution_context::_emit_native_code(std::unique_ptr<llvm::Module>&& module, llvm::Function *function)
+    {
+        auto module_ptr = module.get();
+
+        //  Compile module to native code
+        _execution_engine->addModule(std::move(module));
+        auto del_seq = delete_sequence{*_execution_engine, module_ptr};
+
+        _execution_engine->finalizeObject();
+        auto native_func =
+            reinterpret_cast<native_process_func>(_execution_engine->getPointerToFunction(function));
+
+        /*
+         *      Notify process thread that a native function is ready
+         */
+        if (_compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func})) {
+            _sequence++;
+            _delete_sequences.emplace(_sequence, std::move(del_seq));
+            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)\n", _sequence);
+        }
+        else {
+            LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !\n");
+            LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?\n");
+        }
+    }
+
     llvm::Value *graph_execution_context::get_cycle_state_ptr(
         llvm::IRBuilder<>& builder,
         state_map::iterator state_it,
         llvm::Value *instance_num_value,
         unsigned output_id, unsigned int output_count)
     {
-        return create_array_ptr(
-                        builder,
-                        ir_helper::runtime::get_raw_pointer(builder, state_it->second.cycle_state.data() + output_id),
-                        instance_num_value,
-                        sizeof(float) * output_count);
+        return
+            builder.CreateGEP(
+                builder.CreateIntToPtr(
+                    llvm::ConstantInt::get(
+                        builder.getIntNTy(sizeof(float*) * 8),
+                        reinterpret_cast<intptr_t>(state_it->second.cycle_state.data() + output_id)),
+                    llvm::Type::getFloatPtrTy(_llvm_context)),
+                builder.CreateMul(
+                    instance_num_value,
+                    llvm::ConstantInt::get(builder.getInt64Ty(), output_count)));
     }
 
-    llvm::Value *graph_execution_context::create_array_ptr(
-            llvm::IRBuilder<>& builder,
-            llvm::Value *base,
-            llvm::Value *index,
-            std::size_t block_size)
-    {
-        return builder.CreateAdd(
-                    base,
-                    builder.CreateMul(
-                        index,
-                        llvm::ConstantInt::get(_llvm_context,llvm::APInt(64, block_size))));
-    }
-
-    void graph_execution_context::process(std::size_t instance_num, const float * inputs, float *outputs)
+    bool graph_execution_context::update_program() noexcept
     {
         compile_done_msg msg;
 
         //  Process one compile done msg (if any)
         //  and update native code ptr
-        if (_compile_done_msg_queue.dequeue(msg))
+        if (_compile_done_msg_queue.dequeue(msg)) {
             _process_compile_done_msg(msg);
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
 
-        //  run native code
+    void graph_execution_context::process(std::size_t instance_num, const float * inputs, float *outputs) noexcept
+    {
         _process_func(instance_num, inputs, outputs);
     }
 
+    void graph_execution_context::initialize_state(std::size_t instance_num) noexcept
+    {
+        _initialize_func(instance_num);
+    }
 
     void graph_execution_context::_process_ack_msg(const ack_msg msg)
     {

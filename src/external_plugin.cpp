@@ -74,7 +74,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> arg_values{};
 
         arg_values.push_back(mutable_state_ptr != nullptr ?
-            builder.CreateIntToPtr(mutable_state_ptr, builder.getInt8PtrTy()) :
+            mutable_state_ptr :
             llvm::ConstantPointerNull::get(builder.getInt8PtrTy()));
 
         //  Get arguments
@@ -102,6 +102,10 @@ namespace DSPJIT {
         const std::size_t mutable_state_size)
     :   _mutable_state_size{mutable_state_size}
     {
+        /*
+         *  external plugins modules function symbols which are not declaration (from external libs)
+         *  are prefixed in order to avoid name collisions
+         */
         const auto symbol_prefix = "plugin__" + ptr_2_string(this) + "__";
         bool process_func_found = false;
         std::vector<std::unique_ptr<llvm::Module>> modules;
@@ -109,12 +113,13 @@ namespace DSPJIT {
         for (const auto& obj_path : code_object_paths) {
             //  Load the module object from file
             llvm::SMDiagnostic error;
+
+            LOG_INFO("[external_plugin] Loading module %s\n", obj_path.c_str());
             auto module = llvm::parseIRFile(obj_path.c_str(), error, llvm_context);
             if (!module) {
                 LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path.c_str());
                 throw std::runtime_error("DSPJIT : Failed to load object");
             }
-            LOG_INFO("[external_plugin] Loaded module %s\n", obj_path.c_str());
 
             for(auto& function : *module) {
                 //  Ingore declaration (there are typically libs functions)

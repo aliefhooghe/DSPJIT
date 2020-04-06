@@ -25,7 +25,11 @@ namespace DSPJIT {
                 const std::vector<llvm::Value*>& inputs,
                 llvm::Value *mutable_state_ptr) const
     {
-        return {ir_helper::runtime::create_load(builder, _ref)};
+        auto ptr = builder.CreateIntToPtr(
+            llvm::ConstantInt::get(builder.getIntNTy(sizeof(float*)*8), reinterpret_cast<intptr_t>(_ref)),
+            llvm::Type::getFloatPtrTy(builder.getContext()));
+
+        return {builder.CreateLoad(ptr)};
     }
 
     // Add
@@ -55,16 +59,15 @@ namespace DSPJIT {
                 llvm::Value *mutable_state_ptr) const
     {
         using namespace llvm;
-        using namespace ir_helper::runtime;
 
         //  Get pointer to state (= float instance)
-        Value *ir_state_ptr = raw2typed_ptr<float>(builder, mutable_state_ptr);
+        Value *state_ptr = builder.CreateBitCast(mutable_state_ptr, llvm::Type::getFloatPtrTy(builder.getContext()));
 
         //  output <- State :   Load State
-        Value *output = builder.CreateLoad(ir_state_ptr);
+        Value *output = builder.CreateLoad(state_ptr);
 
         //  state <- input  :   Store State
-        builder.CreateStore(inputs[0], ir_state_ptr);
+        builder.CreateStore(inputs[0], state_ptr);
 
         return {output};
     }

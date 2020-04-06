@@ -16,11 +16,12 @@ namespace DSPJIT {
     {
         llvm::legacy::PassManager pm{};
         pm.add(llvm::createFunctionInliningPass());
+        pm.add(llvm::createEarlyCSEPass());
         pm.add(llvm::createReassociatePass());
         pm.add(llvm::createConstantPropagationPass());
-        pm.add(llvm::createAggressiveDCEPass());
         pm.add(llvm::createDeadCodeEliminationPass());
         pm.add(llvm::createPromoteMemoryToRegisterPass());
+        pm.add(llvm::createAggressiveDCEPass());
         pm.run(m);
     }
 

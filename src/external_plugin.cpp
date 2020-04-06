@@ -27,24 +27,32 @@ namespace DSPJIT {
         explicit external_plugin_node(
             unsigned int input_count,
             unsigned int output_count,
-            const std::string& symbol,
+            const std::string& process_symbol,
+            const std::optional<std::string>& initialize_symbol,
             std::size_t mutable_state_size);
+
+        void initialize_mutable_state(
+                llvm::IRBuilder<>& builder,
+                llvm::Value *mutable_state) const override;
 
         std::vector<llvm::Value*> emit_outputs(
                 llvm::IRBuilder<>& builder,
                 const std::vector<llvm::Value*>& inputs,
                 llvm::Value *mutable_state_ptr) const override;
     private:
-        const std::string _symbol;
+        const std::string _process_symbol;
+        const std::optional<std::string> _initialize_symbol;
     };
 
     external_plugin_node::external_plugin_node(
         unsigned int input_count,
         unsigned int output_count,
-        const std::string& symbol,
+        const std::string& process_symbol,
+        const std::optional<std::string>& initialize_symbol,
         std::size_t mutable_state_size)
     :   compile_node_class{input_count, output_count, mutable_state_size},
-        _symbol{symbol}
+        _process_symbol{process_symbol},
+        _initialize_symbol{initialize_symbol}
     {
     }
 
@@ -57,10 +65,10 @@ namespace DSPJIT {
         const auto output_count = get_output_count();
 
         auto module = builder.GetInsertBlock()->getModule();
-        auto function = module->getFunction(_symbol);
+        auto function = module->getFunction(_process_symbol);
 
         if (function == nullptr) {
-            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", _symbol.c_str())
+            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", _process_symbol.c_str())
             throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
         }
 
@@ -94,7 +102,29 @@ namespace DSPJIT {
         return output_values;
     }
 
-    //
+    void external_plugin_node::initialize_mutable_state(
+        llvm::IRBuilder<>& builder,
+        llvm::Value *mutable_state) const
+    {
+        if (!_initialize_symbol.has_value())
+            return;
+
+        const auto initialize_symbol = _initialize_symbol.value();
+        auto module = builder.GetInsertBlock()->getModule();
+        auto function = module->getFunction(initialize_symbol);
+
+        if (function == nullptr) {
+            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", initialize_symbol.c_str())
+            throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
+        }
+
+        //  Call the initialize function on the given state
+        builder.CreateCall(function, {mutable_state});
+    }
+
+    /*
+     *  External Plugin implementation
+     */
 
     external_plugin::external_plugin(
         llvm::LLVMContext &llvm_context,
@@ -123,35 +153,50 @@ namespace DSPJIT {
 
             for(auto& function : *module) {
                 //  Ingore declaration (there are typically libs functions)
-                if (!function.isDeclaration()) {
-                    const auto new_name = symbol_prefix + function.getName();
+                if (function.isDeclaration())
+                    continue;
 
-                    if (function.getName().equals(process_func_symbol)) {
-                        if (process_func_found) {
-                            LOG_WARNING("[external_plugin] Warning : duplicate symbol %s\n", process_func_symbol);
-                            break;
-                        }
+                const auto new_name = symbol_prefix + function.getName();
 
-                        process_func_found = true;
-                        _mangled_process_func_symbol = new_name.str();
-
-                        //  Check that function match needed interface
-                        if (_read_process_func_type(function.getFunctionType())) {
-                            LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)\n", _input_count, _output_count);
-                        }
-                        else {
-                            LOG_ERROR("[external_plugin] process function arguments does not match the required interface\n");
-                            throw std::runtime_error("");
-                        }
+                if (function.getName().equals(process_func_symbol)) {
+                    if (process_func_found) {
+                        LOG_WARNING("[external_plugin] Warning : duplicate process symbol %s\n", process_func_symbol);
+                        break;
                     }
 
-                    //  Rename the function in order to isolate this plugin's functions in a namespace
-                    function.setName(new_name);
+                    process_func_found = true;
+                    _mangled_process_func_symbol = new_name.str();
 
-                    //  Remove all function attributes as they can prevent optimization such as inlining
-                    function.setAttributes(
-                        llvm::AttributeList::get(llvm_context, llvm::ArrayRef<llvm::AttributeList>{}));
+                    //  Check that process function match needed interface
+                    if (_read_process_func_type(function.getFunctionType())) {
+                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)\n", _input_count, _output_count);
+                    }
+                    else {
+                        LOG_ERROR("[external_plugin] process function does not match the required interface\n");
+                        throw std::runtime_error("DSPJIT::external plugin bad process func interface");
+                    }
                 }
+                else if (function.getName().equals(initialize_func_symbol))
+                {
+                    _mangled_initialize_func_symbol = new_name.str();
+
+                    //  Check that initialize function match needed interface
+                    if (_check_initialize_func_type(function.getFunctionType())) {
+                        LOG_DEBUG("[external_plugin] Found initialize symbol\n");
+                    }
+                    else {
+                        LOG_ERROR("[external_plugin] process function does not match the required interface\n");
+                        throw std::runtime_error("DSPJIT::external plugin bad process func interface");
+                    }
+                }
+
+                //  Rename the function in order to isolate this plugin's functions in a namespace
+                function.setName(new_name);
+
+                //  Remove all function attributes as they can prevent optimization such as inlining
+                function.setAttributes(
+                    llvm::AttributeList::get(llvm_context, llvm::ArrayRef<llvm::AttributeList>{}));
+
             }
 
             modules.emplace_back(std::move(module));
@@ -160,6 +205,10 @@ namespace DSPJIT {
         if (!process_func_found) {
             LOG_ERROR("[external_plugin] Symbol '%s' not found in plugin\n", process_func_symbol);
             throw std::runtime_error("DSPJIT : external_plugin : symbol not found");
+        }
+        else if (!_mangled_initialize_func_symbol.has_value() && mutable_state_size > 0u) {
+            LOG_WARNING("[external_plugin] Plugin does not provide an initialize function whereas its state have a non zero size (%u bytes)\n",
+                mutable_state_size);
         }
 
         //  link all modules together
@@ -182,6 +231,7 @@ namespace DSPJIT {
             _input_count,
             _output_count,
             _mangled_process_func_symbol,
+            _mangled_initialize_func_symbol,
             _mutable_state_size);
     }
 
@@ -233,6 +283,12 @@ namespace DSPJIT {
         }
 
         return true;
+    }
+
+    bool external_plugin::_check_initialize_func_type(const llvm::FunctionType* func_type)
+    {
+        //  todo check type
+        return func_type->getFunctionNumParams() == 1u;
     }
 
 }

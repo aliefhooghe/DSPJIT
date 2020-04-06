@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <optional>
 #include <filesystem>
 
 #include "compile_node_class.h"
@@ -13,11 +14,16 @@ namespace DSPJIT {
      *  \class
      *  \brief
      *
-     *  node_process(void *state, float ...inputs, float* ...outputs)
+     *  required  :  node_process(void *state, float ...inputs, float* ...outputs)
+     *  optional  :  node_initialize(void *state)
+     *
      *
      **/
     class external_plugin {
+
         static constexpr auto process_func_symbol = "node_process";
+        static constexpr auto initialize_func_symbol = "node_initialize";
+
     public:
         explicit external_plugin(
             llvm::LLVMContext &llvm_context,
@@ -42,11 +48,13 @@ namespace DSPJIT {
 
     private:
         bool _read_process_func_type(const llvm::FunctionType*);
+        bool _check_initialize_func_type(const llvm::FunctionType*);
 
         const std::size_t _mutable_state_size;
         unsigned int _input_count;
         unsigned int _output_count;
         std::string _mangled_process_func_symbol;
+        std::optional<std::string> _mangled_initialize_func_symbol{};
         std::unique_ptr<llvm::Module> _module{};
     };
 

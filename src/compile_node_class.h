@@ -37,7 +37,7 @@ namespace DSPJIT {
     protected:
         virtual void initialize_mutable_state(
                 llvm::IRBuilder<>& builder,
-                llvm::Value *mutable_state)
+                llvm::Value *mutable_state) const
         {}
 
         virtual std::vector<llvm::Value*> emit_outputs(
@@ -150,7 +150,11 @@ namespace DSPJIT {
         using ack_msg = compile_sequence_t;
 
         /* compile_done msg are send from compile thread to process thread */
-        using compile_done_msg = std::pair<compile_sequence_t, native_process_func>;
+        struct compile_done_msg {
+            compile_sequence_t seq;
+            native_process_func process_func;
+            native_initialize_func initialize_func;
+        };
 
         /*
          *   Compile Thread
@@ -241,10 +245,18 @@ namespace DSPJIT {
             llvm::Value *instance_num_value,
             unsigned output_id, unsigned int output_count);
 
+        llvm::Value *get_mutable_state_ptr(
+            llvm::IRBuilder<>& builder,
+            state_map::iterator state_it,
+            llvm::Value *instance_num_value);
+
         //
         state_map::iterator _get_node_mutable_state(const compile_node_class*);
 
-        void _emit_native_code(std::unique_ptr<llvm::Module>&&, llvm::Function*);
+        void _emit_native_code(
+            std::unique_ptr<llvm::Module>&& graph_module,
+            llvm::Function* process_func,
+            llvm::Function* initialize_func);
 
         /**
          *  \brief Process an acknowledgment message

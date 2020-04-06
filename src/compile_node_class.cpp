@@ -106,6 +106,12 @@ namespace DSPJIT {
                 node_values,
                 *module);
 
+        auto initialize_function =
+            _compile_initialize_function(
+                input_nodes,
+                node_values,
+                *module);
+
         //  Remove state for nodes that are not anymore used
         _collect_unused_states(node_values);
 
@@ -131,7 +137,7 @@ namespace DSPJIT {
 #endif
 
         //  Compile LLVM IR to native code
-        _emit_native_code(std::move(module), process_function);
+        _emit_native_code(std::move(module), process_function, initialize_function);
     }
 
     llvm::Function * graph_execution_context::_compile_process_function(
@@ -191,16 +197,25 @@ namespace DSPJIT {
 
         //  for each node that have been used in the last compilation
         for (const auto& [node, val] : node_values) {
-            if (std::any_of(
+
+            if (node->mutable_state_size == 0u ||
+                std::any_of(
                     input_nodes.begin(), input_nodes.end(),
                     [ptr = node](const auto& in) { return &(in.get()) == ptr; }))
             {
-                //  Ignore input nodes as they are not used for computation
+                //  Ignore stateless nodes and inputs (inputs nodes are not used for computation)
                 continue;
             }
 
-            // node->initialize_mutable_state(
-            //     builder, );
+
+            auto state_it = _state.find(node);
+            if (state_it == _state.end()) {
+                LOG_ERROR("[graph_execution_context][Compile Thread] Compile initialize function : Did not find a state to initialize !\n");
+                continue;
+            }
+
+            auto state_ptr = get_mutable_state_ptr(builder, state_it, instance_num_value);
+            node->initialize_mutable_state(builder, state_ptr);
         }
 
         builder.CreateRetVoid();
@@ -360,17 +375,9 @@ namespace DSPJIT {
 
         if (node->mutable_state_size != 0u) {
             // state_ptr <- base + instance_num * state size
-
             state_ptr =
-                builder.CreateGEP(
-                    builder.CreateIntToPtr(
-                        llvm::ConstantInt::get(
-                            builder.getIntNTy(sizeof(uint8_t*) * 8),
-                            reinterpret_cast<intptr_t>(state_it->second.data.data())),
-                        builder.getInt8PtrTy()),
-                    builder.CreateMul(
-                        instance_num_value,
-                        llvm::ConstantInt::get(builder.getInt64Ty(), node->mutable_state_size)));
+                get_mutable_state_ptr(
+                    builder, state_it, instance_num_value);
         }
 
         // compile processing
@@ -394,22 +401,27 @@ namespace DSPJIT {
         }
     }
 
-    void graph_execution_context::_emit_native_code(std::unique_ptr<llvm::Module>&& module, llvm::Function *function)
+    void graph_execution_context::_emit_native_code(
+        std::unique_ptr<llvm::Module>&& graph_module,
+        llvm::Function *process_func,
+        llvm::Function* initialize_func)
     {
-        auto module_ptr = module.get();
+        auto module_ptr = graph_module.get();
 
         //  Compile module to native code
-        _execution_engine->addModule(std::move(module));
-        auto del_seq = delete_sequence{*_execution_engine, module_ptr};
-
+        _execution_engine->addModule(std::move(graph_module));
         _execution_engine->finalizeObject();
-        auto native_func =
-            reinterpret_cast<native_process_func>(_execution_engine->getPointerToFunction(function));
 
+        auto process_func_pointer =
+            reinterpret_cast<native_process_func>(_execution_engine->getPointerToFunction(process_func));
+        auto initialize_func_pointer =
+            reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_func));
+        auto del_seq =
+            delete_sequence{*_execution_engine, module_ptr};
         /*
          *      Notify process thread that a native function is ready
          */
-        if (_compile_done_msg_queue.enqueue(compile_done_msg{_sequence, native_func})) {
+        if (_compile_done_msg_queue.enqueue({_sequence, process_func_pointer, initialize_func_pointer})) {
             _sequence++;
             _delete_sequences.emplace(_sequence, std::move(del_seq));
             LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)\n", _sequence);
@@ -436,6 +448,23 @@ namespace DSPJIT {
                 builder.CreateMul(
                     instance_num_value,
                     llvm::ConstantInt::get(builder.getInt64Ty(), output_count)));
+    }
+
+    llvm::Value *graph_execution_context::get_mutable_state_ptr(
+        llvm::IRBuilder<>& builder,
+        state_map::iterator state_it,
+        llvm::Value *instance_num_value)
+    {
+        return
+            builder.CreateGEP(
+                builder.CreateIntToPtr(
+                    llvm::ConstantInt::get(
+                        builder.getIntNTy(sizeof(uint8_t*) * 8),
+                        reinterpret_cast<intptr_t>(state_it->second.data.data())),
+                    builder.getInt8PtrTy()),
+                builder.CreateMul(
+                    instance_num_value,
+                    llvm::ConstantInt::get(builder.getInt64Ty(), state_it->second.size)));
     }
 
     bool graph_execution_context::update_program() noexcept
@@ -475,12 +504,14 @@ namespace DSPJIT {
 
     void graph_execution_context::_process_compile_done_msg(const compile_done_msg msg)
     {
-        LOG_DEBUG("[graph_execution_context][process thread] received compile done from compile thread (seq = %u). Send acknowledgment to compile thread\n", msg.first);
-        //  Use the new process func
-        _process_func = msg.second;
+        LOG_DEBUG("[graph_execution_context][process thread] received compile done from compile thread (seq = %u). Send acknowledgment to compile thread\n", msg.seq);
+
+        //  Use the new process and initialize func
+        _process_func = msg.process_func;
+        _initialize_func = msg.initialize_func;
 
         //  Send ack message to notify that old function is not anymore in use
-        _ack_msg_queue.enqueue(msg.first);
+        _ack_msg_queue.enqueue(msg.seq);
     }
 
 }

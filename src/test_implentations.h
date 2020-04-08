@@ -162,18 +162,18 @@ namespace DSPJIT {
     class last_compile_node : public compile_node_class {
 
     public:
-        last_compile_node(const float initial_value)
-        :   compile_node_class{1u, 1u, sizeof(float)},
-            _initial_value{initial_value}
+        last_compile_node()
+        :   compile_node_class{1u, 1u, sizeof(float)}
         {}
+
+        void initialize_mutable_state(
+                llvm::IRBuilder<>& builder,
+                llvm::Value *mutable_state) const override;
 
         std::vector<llvm::Value*> emit_outputs(
                 llvm::IRBuilder<>& builder,
                 const std::vector<llvm::Value*>& inputs,
                 llvm::Value *mutable_state_ptr) const override;
-
-    private:
-        const float _initial_value;
     };
 
     // unary function node (only function, no lambda or callablo object because for compile node we need a symbol)

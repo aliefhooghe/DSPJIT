@@ -71,4 +71,16 @@ namespace DSPJIT {
 
         return {output};
     }
+
+    void last_compile_node::initialize_mutable_state(
+                llvm::IRBuilder<>& builder,
+                llvm::Value *mutable_state) const
+    {
+        auto zero = llvm::ConstantFP::get(
+                builder.getContext(),
+                llvm::APFloat::getZero(llvm::APFloat::IEEEsingle()));
+
+        auto state_ptr = builder.CreateBitCast(mutable_state, llvm::Type::getFloatPtrTy(builder.getContext()));
+        builder.CreateStore(zero, state_ptr);
+    }
 }

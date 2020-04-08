@@ -126,40 +126,95 @@ TEST_CASE("cycle state : integrator")
     graph_execution_context context{llvm_context};
 
     compile_node_class in{0u, 1u}, out{1u, 0u};
-    add_compile_node add;
-
-    in.connect(add, 0u);
-    add.connect(add, 1u); // cycle : state
-    add.connect(out, 0u);
-
-    context.compile({in}, {out});
-    context.update_program();
-
     const float input = 1.0f;
     float output = 0.0f;
 
-    context.process(&input, &output);
-    REQUIRE(output == Approx(1.0f));
+    //  scope to control add lifetime
+    {
+        add_compile_node add;
 
-    context.process(&input, &output);
-    REQUIRE(output == Approx(2.0f));
+        in.connect(add, 0u);
+        add.connect(add, 1u); // cycle : state
+        add.connect(out, 0u);
 
-    //  Recompilation
+        context.compile({in}, {out});
+        context.update_program();
+
+        context.process(&input, &output);
+        REQUIRE(output == Approx(1.0f));
+
+        context.process(&input, &output);
+        REQUIRE(output == Approx(2.0f));
+
+        //  Recompilation
+        context.compile({in}, {out});
+        context.update_program();
+
+        context.process(&input, &output);
+        REQUIRE(output == Approx(3.0f));
+
+        context.process(&input, &output);
+        REQUIRE(output == Approx(4.0f));
+
+        //  Recompilation again
+        context.compile({in}, {out});
+        context.update_program();
+
+        context.process(&input, &output);
+        REQUIRE(output == Approx(5.0f));
+
+        //  Disconnect the cycle and recompile
+        add.disconnect(1u);
+        context.compile({in}, {out});
+        context.update_program();
+
+        context.process(&input, &output);
+        REQUIRE(output == Approx(input));
+
+    }   //  delete add
+
+    //  The program is independent from the graph (graph = source code)
+    context.process(&input, &output);
+    REQUIRE(output == Approx(input));
+
+    //  Recompile program
     context.compile({in}, {out});
     context.update_program();
 
     context.process(&input, &output);
-    REQUIRE(output == Approx(3.0f));
+    REQUIRE(output == Approx(0.f));
+}
 
-    context.process(&input, &output);
-    REQUIRE(output == Approx(4.0f));
+TEST_CASE("node state : z-1")
+{
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
+    float input, output;
+    compile_node_class in{0u, 1u}, out{1u, 0u};
+    last_compile_node node;
 
-    //  Recompilation again
+    in.connect(node, 0u);
+    node.connect(out, 0u);
+
     context.compile({in}, {out});
     context.update_program();
 
+    input = 1.f;
     context.process(&input, &output);
-    REQUIRE(output == Approx(5.0f));
+    //  State are zeo initialized on creation
+    REQUIRE(output == Approx(0.f));
+
+    input = 2.f;
+    context.process(&input, &output);
+    REQUIRE(output == Approx(1.f));
+    context.process(&input, &output);
+    REQUIRE(output == Approx(2.f));
+
+    context.initialize_state();
+    context.process(&input, &output);
+    REQUIRE(output == Approx(0.f));
+    context.process(&input, &output);
+    REQUIRE(output == Approx(2.f));
 }
 
 /**

@@ -117,7 +117,8 @@ namespace DSPJIT {
 
 #ifdef GAMMOU_PRINT_IR
         LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
-        ir_helper::print_module(*module);
+        ir_helper::print_function(*process_function);
+        ir_helper::print_function(*initialize_function);
 #endif
 
         //  Check generated IR code
@@ -133,7 +134,8 @@ namespace DSPJIT {
 
 #ifdef GAMMOU_PRINT_IR
         LOG_INFO("[graph_execution_context][compile thread] IR code after optimization\n");
-        ir_helper::print_module(*module);
+        ir_helper::print_function(*process_function);
+        ir_helper::print_function(*initialize_function);
 #endif
 
         //  Compile LLVM IR to native code
@@ -153,7 +155,7 @@ namespace DSPJIT {
             llvm::Type::getFloatPtrTy(_llvm_context)};
 
         auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), arg_types, false /* is_var_arg */);
-        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "", &graph_module);
+        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "graph__process_function", &graph_module);
 
         //  Create function code block
         auto basic_block = llvm::BasicBlock::Create(_llvm_context, "", function);
@@ -178,7 +180,6 @@ namespace DSPJIT {
 
         //  Finish function by insterting a ret instruction
         builder.CreateRetVoid();
-
         return function;
     }
 
@@ -188,7 +189,7 @@ namespace DSPJIT {
         llvm::Module& graph_module)
     {
         auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), {llvm::Type::getInt64Ty(_llvm_context)}, false);
-        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "", &graph_module);
+        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "graph__initialize_function", &graph_module);
         auto instance_num_value = function->arg_begin();
         auto basic_block = llvm::BasicBlock::Create(_llvm_context, "", function);
 
@@ -206,7 +207,6 @@ namespace DSPJIT {
                 //  Ignore stateless nodes and inputs (inputs nodes are not used for computation)
                 continue;
             }
-
 
             auto state_it = _state.find(node);
             if (state_it == _state.end()) {
@@ -404,7 +404,7 @@ namespace DSPJIT {
     void graph_execution_context::_emit_native_code(
         std::unique_ptr<llvm::Module>&& graph_module,
         llvm::Function *process_func,
-        llvm::Function* initialize_func)
+        llvm::Function *initialize_func)
     {
         auto module_ptr = graph_module.get();
 

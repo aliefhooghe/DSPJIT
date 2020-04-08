@@ -106,7 +106,7 @@ namespace DSPJIT {
         llvm::IRBuilder<>& builder,
         llvm::Value *mutable_state) const
     {
-        if (!_initialize_symbol.has_value())
+        if (!_initialize_symbol.has_value() || mutable_state == nullptr)
             return;
 
         const auto initialize_symbol = _initialize_symbol.value();

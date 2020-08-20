@@ -47,6 +47,7 @@ set(DSPJIT_SRC
     test_implentations.h)
 
 add_library(DSPJIT ${DSPJIT_SRC})
+set_target_properties(DSPJIT PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(DSPJIT PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(DSPJIT PUBLIC LLVM)
 

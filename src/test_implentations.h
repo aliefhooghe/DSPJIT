@@ -205,6 +205,18 @@ namespace DSPJIT {
     //     }
     // };
 
+    class invert_compile_node : public compile_node_class {
+    public:
+        invert_compile_node()
+        :   compile_node_class{1u, 1u}
+        {}
+
+        std::vector<llvm::Value*> emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
+    };
+
 
 }
 

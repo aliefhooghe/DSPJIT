@@ -83,4 +83,13 @@ namespace DSPJIT {
         auto state_ptr = builder.CreateBitCast(mutable_state, llvm::Type::getFloatPtrTy(builder.getContext()));
         builder.CreateStore(zero, state_ptr);
     }
+
+    std::vector<llvm::Value*> invert_compile_node::emit_outputs(
+                llvm::IRBuilder<>& builder,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *) const
+    {
+        return {builder.CreateFDiv(
+            llvm::ConstantFP::get(builder.getFloatTy(), 1.), inputs[0])};
+    }
 }

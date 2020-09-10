@@ -87,6 +87,8 @@ namespace DSPJIT {
     {
         LOG_INFO("[graph_execution_context][compile thread] graph compilation\n");
 
+        _last_compiled_nodes.clear();
+
         // Process acq_msg : Clean unused stuff
         ack_msg msg;
         if (_ack_msg_queue.dequeue(msg))
@@ -107,12 +109,10 @@ namespace DSPJIT {
                 *module);
 
         auto initialize_function =
-            _compile_initialize_function(
-                node_values,
-                *module);
+            _compile_initialize_function(*module);
 
         //  Remove state for nodes that are not anymore used
-        _collect_unused_states(node_values);
+        _collect_unused_states();
 
 #ifdef GAMMOU_PRINT_IR
         LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
@@ -182,9 +182,7 @@ namespace DSPJIT {
         return function;
     }
 
-    llvm::Function *graph_execution_context::_compile_initialize_function(
-        value_memoize_map& node_values,
-        llvm::Module& graph_module)
+    llvm::Function *graph_execution_context::_compile_initialize_function(llvm::Module& graph_module)
     {
         auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), {llvm::Type::getInt64Ty(_llvm_context)}, false);
         auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "graph__initialize_function", &graph_module);
@@ -195,7 +193,7 @@ namespace DSPJIT {
         builder.SetInsertPoint(basic_block);
 
         //  for each node that have been used in the last compilation
-        for (const auto& [node, val] : node_values) {
+        for (const auto& node : _last_compiled_nodes) {
 
             if (node->mutable_state_size == 0u)
             {
@@ -269,7 +267,7 @@ namespace DSPJIT {
         }
     }
 
-    void graph_execution_context::_collect_unused_states(value_memoize_map& values)
+    void graph_execution_context::_collect_unused_states()
     {
         //  get iterator to current (last) delete sequence (map can't be empty)
         auto del_seq_it = _delete_sequences.rbegin();
@@ -280,7 +278,7 @@ namespace DSPJIT {
             const auto cur_it = state_it++;
 
             //  if this node is not used anymore
-            if (values.find(cur_it->first) == values.end())
+            if (_last_compiled_nodes.find(cur_it->first) == _last_compiled_nodes.end())
             {
                 //  Move the state in the delete_sequence in order to make it deleted when possible
                 del_seq_it->second.add_deleted_node(std::move(cur_it->second));
@@ -340,6 +338,7 @@ namespace DSPJIT {
 
             //  Compile node
             compile_node(builder, node, instance_num_value, values, value_it->second);
+            _last_compiled_nodes.insert(node);
 
             return value_it->second[output_id];
         }
@@ -373,6 +372,10 @@ namespace DSPJIT {
             state_ptr =
                 get_mutable_state_ptr(
                     builder, state_it, instance_num_value);
+        }
+        else
+        {
+            state_ptr = instance_num_value;
         }
 
         // compile processing

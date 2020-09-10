@@ -31,6 +31,8 @@ find_package(Catch2 REQUIRED)
 set(DSPJIT_SRC
     compile_node_class.cpp
     compile_node_class.h
+    composite_compile_node.cpp
+    composite_compile_node.h
     external_plugin.h
     external_plugin.cpp
     ir_helper.cpp

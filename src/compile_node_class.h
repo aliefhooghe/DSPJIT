@@ -10,6 +10,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 #include <functional>
 #include <initializer_list>
 
@@ -21,6 +22,7 @@
 namespace DSPJIT {
 
     class graph_execution_context;
+    class composite_compile_node;
 
     //
     class compile_node_class : public node<compile_node_class> {
@@ -50,6 +52,9 @@ namespace DSPJIT {
     };
 
     class graph_execution_context {
+
+        friend class composite_compile_node;
+
         using native_process_func = void (*)(std::size_t instance_num, const float *inputs, float *outputs);
         using native_initialize_func = void (*)(std::size_t instance_num);
 
@@ -167,6 +172,8 @@ namespace DSPJIT {
         llvm::LLVMContext& _llvm_context;
         std::unique_ptr<llvm::ExecutionEngine> _execution_engine;
         std::vector<std::unique_ptr<llvm::Module>> _modules{};
+
+        std::set<const compile_node_class*> _last_compiled_nodes{};    //  node thaat have been used ar last compilation
         state_map _state;
         delete_sequence_map _delete_sequences;
         compile_sequence_t _sequence;
@@ -179,9 +186,7 @@ namespace DSPJIT {
             value_memoize_map& node_values,
             llvm::Module& graph_module);
 
-        llvm::Function *_compile_initialize_function(
-            value_memoize_map& node_values,
-            llvm::Module& graph_module);
+        llvm::Function *_compile_initialize_function(llvm::Module& graph_module);
 
         /**
          *  \brief Link every needed dependency modules into the graph module
@@ -221,7 +226,7 @@ namespace DSPJIT {
         /**
          *  \brief collect all state where not used to emit a value during the last compilation
          */
-        void _collect_unused_states(value_memoize_map& values);
+        void _collect_unused_states();
 
 
         llvm::Value* compile_node_value(

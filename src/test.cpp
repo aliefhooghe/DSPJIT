@@ -8,6 +8,7 @@
 #include <llvm/Support/raw_os_ostream.h>
 
 #include "test_implentations.h"
+#include "composite_compile_node.h"
 
 using namespace llvm;
 using namespace DSPJIT;
@@ -216,6 +217,45 @@ TEST_CASE("node state : z-1")
     context.process(&input, &output);
     REQUIRE(output == Approx(2.f));
 }
+
+/**
+ *
+ *      Composite Compile Node
+ *
+ **/
+
+TEST_CASE("Composite Compile Node", "composite_compile_node")
+{
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
+    compile_node_class in{0u, 1u}, out{1u, 0u};
+    float input, output;
+
+    add_compile_node add{};
+    composite_compile_node composite{context, 1, 1};
+
+    composite.input().connect(add, 0);
+    composite.input().connect(add, 1);
+    add.connect(composite.output(), 0);
+
+    in.connect(composite, 0);
+    composite.connect(out, 0);
+
+    context.compile({in}, {out});
+    context.update_program();
+
+    input = 1.f;
+    context.process(&input, &output);
+    REQUIRE(output == Approx(2.f));
+
+    composite.output().disconnect(0);
+
+    context.compile({in}, {out});
+    context.update_program();
+    context.process(&input, &output);
+    REQUIRE(output == Approx(0.f));
+}
+
 
 /**
  *

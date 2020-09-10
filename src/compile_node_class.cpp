@@ -122,7 +122,7 @@ namespace DSPJIT {
 
         //  Check generated IR code
         llvm::raw_os_ostream stream{std::cout};
-        if (llvm::verifyFunction(*process_function, &stream)) {
+        if (llvm::verifyFunction(*process_function, &stream) || llvm::verifyFunction(*initialize_function, &stream)) {
             LOG_ERROR("[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation\n");
             //  Do not compile to native code because malformed code could lead to crash
             //  Stay at last process_func

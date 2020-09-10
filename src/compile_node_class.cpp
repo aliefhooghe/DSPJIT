@@ -108,7 +108,6 @@ namespace DSPJIT {
 
         auto initialize_function =
             _compile_initialize_function(
-                input_nodes,
                 node_values,
                 *module);
 
@@ -184,7 +183,6 @@ namespace DSPJIT {
     }
 
     llvm::Function *graph_execution_context::_compile_initialize_function(
-        node_ref_list input_nodes,
         value_memoize_map& node_values,
         llvm::Module& graph_module)
     {
@@ -199,12 +197,9 @@ namespace DSPJIT {
         //  for each node that have been used in the last compilation
         for (const auto& [node, val] : node_values) {
 
-            if (node->mutable_state_size == 0u ||
-                std::any_of(
-                    input_nodes.begin(), input_nodes.end(),
-                    [ptr = node](const auto& in) { return &(in.get()) == ptr; }))
+            if (node->mutable_state_size == 0u)
             {
-                //  Ignore stateless nodes and inputs (inputs nodes are not used for computation)
+                //  Ignore stateless nodes
                 continue;
             }
 

@@ -180,7 +180,6 @@ namespace DSPJIT {
             llvm::Module& graph_module);
 
         llvm::Function *_compile_initialize_function(
-            node_ref_list input_nodes,
             value_memoize_map& node_values,
             llvm::Module& graph_module);
 

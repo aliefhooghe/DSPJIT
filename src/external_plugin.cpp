@@ -6,6 +6,7 @@
 #include <llvm/Linker/Linker.h>
 
 #include "external_plugin.h"
+#include "graph_compiler.h"
 #include "ir_helper.h"
 
 #include <iostream>
@@ -32,13 +33,13 @@ namespace DSPJIT {
             std::size_t mutable_state_size);
 
         void initialize_mutable_state(
-                llvm::IRBuilder<>& builder,
-                llvm::Value *mutable_state) const override;
+            llvm::IRBuilder<>& builder,
+            llvm::Value *mutable_state) const override;
 
         std::vector<llvm::Value*> emit_outputs(
-                llvm::IRBuilder<>& builder,
-                const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+            graph_compiler& compiler,
+            const std::vector<llvm::Value*>& inputs,
+            llvm::Value *mutable_state_ptr) const override;
     private:
         const std::string _process_symbol;
         const std::optional<std::string> _initialize_symbol;
@@ -57,10 +58,11 @@ namespace DSPJIT {
     }
 
     std::vector<llvm::Value*> external_plugin_node::emit_outputs(
-        llvm::IRBuilder<>& builder,
+        graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
         llvm::Value *mutable_state_ptr) const
     {
+        auto& builder = compiler.builder();
         const auto input_count = get_input_count();
         const auto output_count = get_output_count();
 
@@ -103,7 +105,7 @@ namespace DSPJIT {
     }
 
     void external_plugin_node::initialize_mutable_state(
-        llvm::IRBuilder<>& builder,
+            llvm::IRBuilder<>& builder,
         llvm::Value *mutable_state) const
     {
         if (!_initialize_symbol.has_value() || mutable_state == nullptr)

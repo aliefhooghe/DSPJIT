@@ -1,29 +1,26 @@
-#ifndef COMPOSITE_COMPILE_NODE_H_
-#define COMPOSITE_COMPILE_NODE_H_
+#ifndef DSPJIT_COMPOSITE_NODE_H_
+#define DSPJIT_COMPOSITE_NODE_H_
 
 #include "compile_node_class.h"
 
 namespace DSPJIT {
 
-    class composite_compile_node : public compile_node_class {
+    class composite_node : public compile_node_class {
 
     public:
-        composite_compile_node(
-            graph_execution_context &execution_context,
+        composite_node(
             const unsigned int input_count,
             const unsigned output_count);
 
         std::vector<llvm::Value*> emit_outputs(
-            llvm::IRBuilder<>& builder,
+            graph_compiler& compiler,
             const std::vector<llvm::Value*>& inputs,
-            llvm::Value *mutable_state_ptr) const override;
+            llvm::Value * /* stateless node */) const override;
 
         auto& input() noexcept { return _input; }
         auto& output() noexcept { return _output; }
 
     private:
-        graph_execution_context &_execution_context;
-
         //  I/O nodes
         compile_node_class _input;
         compile_node_class _output;

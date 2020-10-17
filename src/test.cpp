@@ -7,8 +7,9 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
-#include "test_implentations.h"
-#include "composite_compile_node.h"
+#include "common_nodes.h"
+#include "composite_node.h"
+#include "graph_execution_context.h"
 
 using namespace llvm;
 using namespace DSPJIT;
@@ -104,7 +105,7 @@ TEST_CASE("Add graph 1", "add_graph 1")
 
     compile_node_class in1{0u, 1u}, in2{0u, 1u};
     compile_node_class out{1u, 0u};
-    add_compile_node add;
+    add_node add;
 
     in1.connect(add, 0u);
     in2.connect(add, 1u);
@@ -132,7 +133,7 @@ TEST_CASE("cycle state : integrator")
 
     //  scope to control add lifetime
     {
-        add_compile_node add;
+        add_node add;
 
         in.connect(add, 0u);
         add.connect(add, 1u); // cycle : state
@@ -192,7 +193,7 @@ TEST_CASE("node state : z-1")
     graph_execution_context context{llvm_context};
     float input, output;
     compile_node_class in{0u, 1u}, out{1u, 0u};
-    last_compile_node node;
+    last_node node;
 
     in.connect(node, 0u);
     node.connect(out, 0u);
@@ -224,15 +225,15 @@ TEST_CASE("node state : z-1")
  *
  **/
 
-TEST_CASE("Composite Compile Node", "composite_compile_node")
+TEST_CASE("Composite Compile Node", "composite_node")
 {
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
     compile_node_class in{0u, 1u}, out{1u, 0u};
     float input, output;
 
-    add_compile_node add{};
-    composite_compile_node composite{context, 1, 1};
+    add_node add{};
+    composite_node composite{1, 1};
 
     composite.input().connect(add, 0);
     composite.input().connect(add, 1);
@@ -256,34 +257,3 @@ TEST_CASE("Composite Compile Node", "composite_compile_node")
     REQUIRE(output == Approx(0.f));
 }
 
-
-/**
- *
- *      ProcessNode
- *
- **/
-
-TEST_CASE("DYN cycle state : integrator")
-{
-    process_node<float> in{0u}, out{1u};
-    add_process_node<float> add;
-
-    in.connect(add, 0u);
-    add.connect(add, 1u); // cycle : state
-    add.connect(out, 0u);
-
-    const float input = 1.0f;
-    float output = 0.0f;
-
-    graph_process({in}, {out}, &input, &output);
-    REQUIRE(output == Approx(1.0f));
-
-    graph_process({in}, {out}, &input, &output);
-    REQUIRE(output == Approx(2.0f));
-
-    graph_process({in}, {out}, &input, &output);
-    REQUIRE(output == Approx(3.0f));
-
-    graph_process({in}, {out}, &input, &output);
-    REQUIRE(output == Approx(4.0f));
-}

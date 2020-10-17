@@ -29,24 +29,30 @@ find_package(Catch2 REQUIRED)
 ## DSPJIT
 
 set(DSPJIT_SRC
+    common_nodes.cpp
+    common_nodes.h
     compile_node_class.cpp
     compile_node_class.h
-    composite_compile_node.cpp
-    composite_compile_node.h
-    external_plugin.h
+    composite_node.cpp
+    composite_node.h
     external_plugin.cpp
+    external_plugin.h
+    graph_compiler.cpp
+    graph_compiler.h
+    graph_execution_context.cpp
+    graph_execution_context.h
+    graph_state_manager.cpp
+    graph_state_manager.h
     ir_helper.cpp
     ir_helper.h
-    ir_optimization.h
     ir_optimization.cpp
+    ir_optimization.h
     lock_free_queue.h
     log.h
     node.h
-    object_dumper.h
     object_dumper.cpp
-    process_node.h
-    test_implentations.cpp
-    test_implentations.h)
+    object_dumper.h
+)
 
 add_library(DSPJIT ${DSPJIT_SRC})
 set_target_properties(DSPJIT PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -58,5 +64,5 @@ add_executable(run_test test.cpp)
 target_link_libraries(run_test DSPJIT)
 
 # Benchmarks
-add_executable(run_benchmark benchmark.cpp)
-target_link_libraries(run_benchmark DSPJIT benchmark)
+# add_executable(run_benchmark benchmark.cpp)
+# target_link_libraries(run_benchmark DSPJIT benchmark)

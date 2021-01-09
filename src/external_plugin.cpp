@@ -83,11 +83,16 @@ namespace DSPJIT {
         //  Call process func
         std::vector<llvm::Value*> arg_values{};
 
-        arg_values.push_back(mutable_state_ptr != nullptr ?
-            mutable_state_ptr :
-            llvm::ConstantPointerNull::get(builder.getInt8PtrTy()));
+        // Add state argument if any
+        if (mutable_state_ptr != nullptr) {
+            const auto state_arg_type =
+                function->getFunctionType()->getFunctionParamType(0);
+            const auto state_arg =
+                compiler.builder().CreatePointerCast(mutable_state_ptr, state_arg_type);
+            arg_values.push_back(state_arg);
+        }
 
-        //  Get arguments
+        //  Add I/O arguments
         for (auto i = 0u; i < input_count; ++i)
             arg_values.push_back(inputs[i]);
         for (auto i = 0u; i < output_count; ++i)
@@ -121,7 +126,9 @@ namespace DSPJIT {
         }
 
         //  Call the initialize function on the given state
-        builder.CreateCall(function, {mutable_state});
+        const auto state_arg_type = function->getFunctionType()->getFunctionParamType(0);
+        const auto state_arg = builder.CreatePointerCast(mutable_state, state_arg_type);
+        builder.CreateCall(function, {state_arg});
     }
 
     /*
@@ -130,9 +137,7 @@ namespace DSPJIT {
 
     external_plugin::external_plugin(
         llvm::LLVMContext &llvm_context,
-        const std::vector<std::filesystem::path>& code_object_paths,
-        const std::size_t mutable_state_size)
-    :   _mutable_state_size{mutable_state_size}
+        const std::vector<std::filesystem::path>& code_object_paths)
     {
         /*
          *  external plugins modules function symbols which are not declaration (from external libs)
@@ -153,6 +158,10 @@ namespace DSPJIT {
                 throw std::runtime_error("DSPJIT : Failed to load object");
             }
 
+            /*
+             * Rename all functions defined in the module in order to avoid symbol colision
+             * Find process and initialize function in the module
+             */
             for(auto& function : *module) {
                 //  Ingore declaration (there are typically libs functions)
                 if (function.isDeclaration())
@@ -170,20 +179,20 @@ namespace DSPJIT {
                     _mangled_process_func_symbol = new_name.str();
 
                     //  Check that process function match needed interface
-                    if (_read_process_func_type(function.getFunctionType())) {
-                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s)\n", _input_count, _output_count);
+                    if (_read_process_func_type(*module, function.getFunctionType())) {
+                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s), state size = %llu\n",
+                            _input_count, _output_count, _mutable_state_size);
                     }
                     else {
                         LOG_ERROR("[external_plugin] process function does not match the required interface\n");
                         throw std::runtime_error("DSPJIT::external plugin bad process func interface");
                     }
                 }
-                else if (function.getName().equals(initialize_func_symbol))
-                {
+                else if (function.getName().equals(initialize_func_symbol)) {
                     _mangled_initialize_func_symbol = new_name.str();
 
                     //  Check that initialize function match needed interface
-                    if (_check_initialize_func_type(function.getFunctionType())) {
+                    if (_check_initialize_func_type(*module, function.getFunctionType())) {
                         LOG_DEBUG("[external_plugin] Found initialize symbol\n");
                     }
                     else {
@@ -198,7 +207,6 @@ namespace DSPJIT {
                 //  Remove all function attributes as they can prevent optimization such as inlining
                 function.setAttributes(
                     llvm::AttributeList::get(llvm_context, llvm::ArrayRef<llvm::AttributeList>{}));
-
             }
 
             modules.emplace_back(std::move(module));
@@ -208,9 +216,9 @@ namespace DSPJIT {
             LOG_ERROR("[external_plugin] Symbol '%s' not found in plugin\n", process_func_symbol);
             throw std::runtime_error("DSPJIT : external_plugin : symbol not found");
         }
-        else if (!_mangled_initialize_func_symbol.has_value() && mutable_state_size > 0u) {
+        else if (!_mangled_initialize_func_symbol.has_value() && _mutable_state_size > 0u) {
             LOG_WARNING("[external_plugin] Plugin does not provide an initialize function whereas its state have a non zero size (%u bytes)\n",
-                mutable_state_size);
+                _mutable_state_size);
         }
 
         //  link all modules together
@@ -237,7 +245,7 @@ namespace DSPJIT {
             _mutable_state_size);
     }
 
-    bool external_plugin::_read_process_func_type(const llvm::FunctionType *func_type)
+    bool external_plugin::_read_process_func_type(const llvm::Module& module, const llvm::FunctionType *func_type)
     {
         const auto param_count = func_type->getFunctionNumParams();
 
@@ -245,13 +253,18 @@ namespace DSPJIT {
             return false;
 
         //  Todo check first arg type
+        auto index = 0u;
+        const auto state_type = _read_state_type(func_type->getFunctionParamType(index));
 
-        /*  */
+        if (state_type) {
+            const auto& data_layout = module.getDataLayout();
+            _mutable_state_size = data_layout.getTypeAllocSize(state_type).getFixedSize();
+            index++;
+        }
 
-        //  void *, float ..., float *...
+        //  [state *,] float ...inputs, float *...outputs
         _input_count = 0u;
         _output_count = 0u;
-        auto i = 1;
 
         auto is_float_ptr = [] (const llvm::Type *t) {
             const auto ptr_type = llvm::dyn_cast<llvm::PointerType>(t);
@@ -259,8 +272,8 @@ namespace DSPJIT {
         };
 
         //  Read inputs types : float...
-        for (; i < param_count; ++i) {
-            const auto param_type = func_type->getFunctionParamType(i);
+        for (; index < param_count; ++index) {
+            const auto param_type = func_type->getFunctionParamType(index);
 
             if (param_type->isFloatTy()) {
                 _input_count++;
@@ -274,8 +287,8 @@ namespace DSPJIT {
         }
 
         //  Read outputs types : float*
-        for (; i < param_count; ++i) {
-            const auto param_type = func_type->getFunctionParamType(i);
+        for (; index < param_count; ++index) {
+            const auto param_type = func_type->getFunctionParamType(index);
 
             if(!is_float_ptr(param_type)) {
                 return false;
@@ -287,10 +300,24 @@ namespace DSPJIT {
         return true;
     }
 
-    bool external_plugin::_check_initialize_func_type(const llvm::FunctionType* func_type)
+    bool external_plugin::_check_initialize_func_type(const llvm::Module&, const llvm::FunctionType* func_type)
     {
-        //  todo check type
-        return func_type->getFunctionNumParams() == 1u;
+        //  Check that the state type is relevant (todo check type coherance)
+        return (func_type->getFunctionNumParams() == 1u) &&
+            (_read_state_type(func_type->getFunctionParamType(0)) != nullptr);
+    }
+
+    llvm::Type *external_plugin::_read_state_type(const llvm::Type *param_type)
+    {
+        if (param_type->isPointerTy()) {
+            const auto ptr_type = llvm::dyn_cast<llvm::PointerType>(param_type);
+            const auto state_type = ptr_type->getElementType();
+
+            if (state_type->isSized())
+                return state_type;
+        }
+
+        return nullptr;
     }
 
 }

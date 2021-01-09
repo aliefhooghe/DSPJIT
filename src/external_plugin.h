@@ -27,8 +27,7 @@ namespace DSPJIT {
     public:
         explicit external_plugin(
             llvm::LLVMContext &llvm_context,
-            const std::vector<std::filesystem::path>& code_object_paths,
-            const std::size_t mutable_state_size = 0u);
+            const std::vector<std::filesystem::path>& code_object_paths);
 
         external_plugin(const external_plugin&) = delete;
         external_plugin(external_plugin &&) = default;
@@ -47,10 +46,12 @@ namespace DSPJIT {
         const auto get_output_count() const noexcept { return _output_count; }
 
     private:
-        bool _read_process_func_type(const llvm::FunctionType*);
-        bool _check_initialize_func_type(const llvm::FunctionType*);
+        bool _read_process_func_type(const llvm::Module& module, const llvm::FunctionType*);
+        bool _check_initialize_func_type(const llvm::Module& module, const llvm::FunctionType*);
 
-        const std::size_t _mutable_state_size;
+        llvm::Type *_read_state_type(const llvm::Type *param_type);
+
+        std::size_t _mutable_state_size{0u};
         unsigned int _input_count;
         unsigned int _output_count;
         std::string _mangled_process_func_symbol;

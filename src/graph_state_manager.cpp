@@ -39,21 +39,26 @@ namespace DSPJIT {
         llvm::IRBuilder<>& builder,
         llvm::Value *instance_num_value)
     {
-        return
-            builder.CreateGEP(
-                builder.CreateIntToPtr(
-                    llvm::ConstantInt::get(
-                        builder.getIntNTy(sizeof(uint8_t*) * 8),
-                        reinterpret_cast<intptr_t>(_data.data())),
-                    builder.getInt8PtrTy()),
-                builder.CreateMul(
-                    instance_num_value,
-                    llvm::ConstantInt::get(builder.getInt64Ty(), _size)));
+        if (_size == 0u) {
+            return nullptr;
+        }
+        else {
+            return
+                builder.CreateGEP(
+                    builder.CreateIntToPtr(
+                        llvm::ConstantInt::get(
+                            builder.getIntNTy(sizeof(uint8_t*) * 8),
+                            reinterpret_cast<intptr_t>(_data.data())),
+                        builder.getInt8PtrTy()),
+                    builder.CreateMul(
+                        instance_num_value,
+                        llvm::ConstantInt::get(builder.getInt64Ty(), _size)));
+        }
     }
 
     graph_state_manager::graph_state_manager(
         llvm::LLVMContext& llvm_context,
-        std::size_t instance_count, 
+        std::size_t instance_count,
         compile_sequence_t initial_sequence_number)
     :   _llvm_context{llvm_context},
         _instance_count{instance_count},
@@ -149,7 +154,7 @@ namespace DSPJIT {
 
         return state_it->second;
     }
-    
+
 }
 
 

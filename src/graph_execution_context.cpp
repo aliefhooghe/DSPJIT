@@ -6,6 +6,7 @@
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 
+#include <chrono>
 #include <iostream>
 
 #include "graph_execution_context.h"
@@ -62,7 +63,7 @@ namespace DSPJIT {
             node_ref_list input_nodes,
             node_ref_list output_nodes)
     {
-        LOG_INFO("[graph_execution_context][compile thread] graph compilation\n");
+        auto begin = std::chrono::steady_clock::now();
 
         // Process acq_msg : Clean unused stuff
         ack_msg msg;
@@ -111,6 +112,10 @@ namespace DSPJIT {
 
         //  Compile LLVM IR to native code
         _emit_native_code(std::move(module), process_function, initialize_function);
+
+        auto end = std::chrono::steady_clock::now();
+        LOG_INFO("[graph_execution_context][compile thread] graph compilation finished (%u ms)\n",
+            std::chrono::duration_cast<std::chrono::milliseconds>(end - begin));
     }
 
     bool graph_execution_context::update_program() noexcept

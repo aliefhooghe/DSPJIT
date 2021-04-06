@@ -1,24 +1,17 @@
-cmake_minimum_required (VERSION 3.7.0)
+cmake_minimum_required (VERSION 3.9.0)
 project (DSPJIT)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# set (CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# LLVM
-# REGARDER https://github.com/llvm-mirror/llvm/tree/master/examples
-
-find_package (LLVM REQUIRED CONFIG)
-message (STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message (STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-
-# Google benchmark
-find_package(benchmark REQUIRED)
-message (STATUS "Found Google benchmark in ${benchmark_DIR}")
-
 # Catch2 test framework
 find_package(Catch2 REQUIRED)
+message (STATUS "Found Catch2 IN_TRY_COMPILE ${Catch2_Dir}")
+
+# Catch2 test framework
+find_package (LLVM REQUIRED)
+message (STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message (STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 
 ###----------###
@@ -54,15 +47,19 @@ set(DSPJIT_SRC
     object_dumper.h
 )
 
+
+# DSPJIT library
 add_library(DSPJIT ${DSPJIT_SRC})
 set_target_properties(DSPJIT PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(DSPJIT PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(DSPJIT PUBLIC LLVM)
+target_include_directories(DSPJIT PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_INCLUDE_DIRS})
+target_link_libraries(DSPJIT PUBLIC LLVMCore LLVMTarget LLVMExecutionEngine LLVMTransformUtils LLVMPasses LLVMMCJIT LLVMX86CodeGen)
+
 
 # Tests
 add_executable(run_test test.cpp)
-target_link_libraries(run_test DSPJIT)
+target_link_libraries(run_test PRIVATE DSPJIT Catch2::Catch2)
+
 
 # Benchmarks
 # add_executable(run_benchmark benchmark.cpp)
-# target_link_libraries(run_benchmark DSPJIT benchmark)
+# target_link_libraries(run_benchmark PRIVATE DSPJIT benchmark::benchmark benchmark::benchmark_main)

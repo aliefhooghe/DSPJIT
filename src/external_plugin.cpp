@@ -149,12 +149,13 @@ namespace DSPJIT {
 
         for (const auto& obj_path : code_object_paths) {
             //  Load the module object from file
+            const auto obj_path_string = obj_path.string();
             llvm::SMDiagnostic error;
 
-            LOG_INFO("[external_plugin] Loading module %s\n", obj_path.c_str());
-            auto module = llvm::parseIRFile(obj_path.c_str(), error, llvm_context);
+            LOG_INFO("[external_plugin] Loading module %s\n", obj_path_string.c_str());
+            auto module = llvm::parseIRFile(obj_path_string, error, llvm_context);
             if (!module) {
-                LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path.c_str());
+                LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path_string.c_str());
                 throw std::runtime_error("DSPJIT : Failed to load object");
             }
 

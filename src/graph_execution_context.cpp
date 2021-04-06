@@ -1,4 +1,5 @@
 
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
@@ -28,10 +29,12 @@ namespace DSPJIT {
         _ack_msg_queue{256},
         _compile_done_msg_queue{256}
     {
+        std::string error_string{};
         static auto llvm_native_was_init = false;
         if (llvm_native_was_init == false) {
             llvm::InitializeNativeTarget();
             llvm::InitializeNativeTargetAsmPrinter();
+            LLVMLinkInMCJIT();
             llvm_native_was_init = true;
         }
 
@@ -42,11 +45,17 @@ namespace DSPJIT {
         _execution_engine =
             std::unique_ptr<llvm::ExecutionEngine>(
                 llvm::EngineBuilder{std::make_unique<llvm::Module>("dummy", _llvm_context)}
+                .setErrorStr(&error_string)
                 .setEngineKind(llvm::EngineKind::JIT)
                 .setTargetOptions(options)
                 .setOptLevel(level)
                 .setMCJITMemoryManager(std::move(memory_mgr))
                 .create());
+
+        if (!_execution_engine) {
+            LOG_ERROR("[graph_execution_context] Failed to initialize execution engine : %s\n", error_string.c_str());
+            throw std::runtime_error("Failed to initialize execution engine ");
+        }
     }
     
     graph_execution_context::~graph_execution_context()
@@ -245,8 +254,6 @@ namespace DSPJIT {
         llvm::Function *process_func,
         llvm::Function *initialize_func)
     {
-        auto& module_ref = *graph_module;
-
         //  Compile module to native code
         _execution_engine->addModule(std::move(graph_module));
         _execution_engine->finalizeObject();

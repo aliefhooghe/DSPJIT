@@ -13,6 +13,7 @@ namespace DSPJIT {
         _cycle_state(instance_count * output_count, 0.f),
         _data(state_size * instance_count, 0u),
         _node_output_count{output_count},
+        _instance_count{instance_count},
         _size{state_size}
     {
 
@@ -28,11 +29,10 @@ namespace DSPJIT {
                 builder.CreateIntToPtr(
                     llvm::ConstantInt::get(
                         builder.getIntNTy(sizeof(float*) * 8),
-                        reinterpret_cast<intptr_t>(_cycle_state.data() + output_id)),
+                        reinterpret_cast<intptr_t>(_cycle_state.data() + output_id * _instance_count)),
                     llvm::Type::getFloatPtrTy(_llvm_context)),
-                builder.CreateMul(
-                    instance_num_value,
-                    llvm::ConstantInt::get(builder.getInt64Ty(), _node_output_count)));
+                instance_num_value
+            );
     }
 
     llvm::Value *graph_state_manager::mutable_node_state::get_mutable_state_ptr(
@@ -54,6 +54,15 @@ namespace DSPJIT {
                         instance_num_value,
                         llvm::ConstantInt::get(builder.getInt64Ty(), _size)));
         }
+    }
+
+    void graph_state_manager::mutable_node_state::_update_output_count(std::size_t output_count)
+    {
+        LOG_DEBUG("Update output count %llu -> %llu\n", _node_output_count, output_count);
+        const auto cycle_state_size = output_count * _instance_count;
+        _node_output_count = output_count;
+        if (_cycle_state.size() <= cycle_state_size)
+            _cycle_state.resize(cycle_state_size);
     }
 
     graph_state_manager::graph_state_manager(
@@ -150,6 +159,11 @@ namespace DSPJIT {
             state_it = _state.emplace(
                 node,
                 mutable_node_state{_llvm_context, node->mutable_state_size, _instance_count, node->get_output_count()}).first;
+        }
+        else {
+            if (node->get_output_count() != state_it->second._node_output_count) {
+                state_it->second._update_output_count(node->get_output_count());
+            }
         }
 
         return state_it->second;

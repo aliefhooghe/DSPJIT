@@ -20,6 +20,11 @@ namespace DSPJIT {
         auto& input() noexcept { return _input; }
         auto& output() noexcept { return _output; }
 
+        void add_input() override;
+        void remove_input() override;
+        void add_output() override;
+        void remove_output() override;
+
     private:
         //  I/O nodes
         compile_node_class _input;

@@ -33,6 +33,7 @@ namespace DSPJIT {
          *      The state is removed only when we are sure that the process thread is not anymore using this state.
          */
         class mutable_node_state {
+            friend class graph_state_manager;
         public:
             explicit mutable_node_state(
                     llvm::LLVMContext& llvm_context,
@@ -58,10 +59,13 @@ namespace DSPJIT {
                 llvm::Value *instance_num_value);
 
         private:
+            void _update_output_count(std::size_t output_count);
+
             llvm::LLVMContext& _llvm_context;
             std::vector<float> _cycle_state;
             std::vector<uint8_t> _data{};
             std::size_t _node_output_count;
+            std::size_t _instance_count;
             std::size_t _size;
         };
 
@@ -83,14 +87,14 @@ namespace DSPJIT {
          * finnished the previous
          */
         void begin_sequence(const compile_sequence_t seq);
-        
+
         /**
          * \brief notify the state manager that a node was used during the current sequence
          * \note can only be called when a compilation sequence has been started
          * \param node the node whose state is used
          */
         void declare_used_node(const compile_node_class *node);
-        
+
         /**
          * \brief notify the state manager that a new compilation sequence was finished an compile
          * the graph state initialization function

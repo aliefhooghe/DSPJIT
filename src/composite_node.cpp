@@ -27,11 +27,36 @@ namespace DSPJIT {
         for (auto i = 0u; i < output_count; i++) {
             unsigned int output_id;
             const auto dependency_node = _output.get_input(i, output_id);
-            
+
             output_values[i] = compiler.node_value(dependency_node, output_id);
         }
 
         return output_values;
     }
+
+    void composite_node::add_input()
+    {
+        node::add_input();
+        _input.add_output();
+    }
+
+    void composite_node::remove_input()
+    {
+        node::remove_input();
+        _input.remove_output();
+    }
+
+    void composite_node::add_output()
+    {
+        node::add_output();
+        _output.add_input();
+    }
+
+    void composite_node::remove_output()
+    {
+        node::remove_output();
+        _output.remove_input();
+    }
+
 
 }

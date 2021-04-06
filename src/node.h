@@ -2,7 +2,7 @@
 #define JITTEST_NODE_H
 
 #include <vector>
-#include <unordered_set>
+#include <set>
 #include <functional>
 
 namespace DSPJIT {
@@ -14,8 +14,17 @@ namespace DSPJIT {
             public:
                 input() = default;
 
-                input(const input&i)    {   plug(i._source);    }
-                input(input&& i)        {   plug(i._source);    }
+                input(const input&i) noexcept
+                {
+                    if (i._source)
+                        plug(i._source, i._output_id);
+                }
+
+                input(input&& i) noexcept
+                {
+                    if (i._source)
+                        plug(i._source, i._output_id);
+                }
 
                 ~input()
                 {
@@ -26,7 +35,7 @@ namespace DSPJIT {
                 {
                     unplug();
                     _source = n;
-                    _source->_users.insert(this);
+                    _source->_users.insert(std::make_pair(this, output_id));
                     _output_id = output_id;
                 }
 
@@ -35,7 +44,7 @@ namespace DSPJIT {
                     if (_source == nullptr)
                         return;
 
-                    _source->_users.erase(this);
+                    _source->_users.erase(std::make_pair(this, _output_id));
                     _source = nullptr;
                 }
 
@@ -57,7 +66,7 @@ namespace DSPJIT {
         virtual ~node()
         {
             //  this avoid iterators invalidation hazard
-            for (auto it = _users.begin(); it != _users.end(); (*it++)->unplug());
+            for (auto it = _users.begin(); it != _users.end(); (*it++).first->unplug());
         }
 
         void connect(Derived& target, unsigned int target_input_id)
@@ -99,13 +108,46 @@ namespace DSPJIT {
             return nullptr;
         }
 
+        virtual void add_input()
+        {
+            _input.push_back(input{});
+        }
+
+        virtual void remove_input()
+        {
+            if (get_input_count() > 0u)
+                _input.pop_back();
+        }
+
+        virtual void add_output()
+        {
+            _output_count++;
+        }
+
+        virtual void remove_output()
+        {
+            if (get_output_count() > 0u) {
+                const auto removed_output_id = _output_count - 1u;
+
+                for (auto it = _users.begin(); it != _users.end();)
+                {
+                    if (it->second == removed_output_id)
+                        (*it++).first->unplug();
+                    else
+                        it++;
+                }
+
+                _output_count--;
+            }
+        }
+
         const unsigned int get_input_count() const noexcept { return _input.size(); }
         const unsigned int get_output_count() const noexcept { return _output_count; }
 
     private:
-        std::unordered_set<input*> _users{};
+        std::set<std::pair<input*, unsigned int>> _users{}; // user input, output id
         std::vector<input> _input;
-        const unsigned int _output_count;
+        unsigned int _output_count;
     };
 
 }

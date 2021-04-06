@@ -93,4 +93,13 @@ namespace DSPJIT {
         return {builder.CreateFDiv(
             llvm::ConstantFP::get(builder.getFloatTy(), 1.), inputs[0])};
     }
+
+    std::vector<llvm::Value*> negate_node::emit_outputs(
+        graph_compiler& compiler,
+        const std::vector<llvm::Value*>& inputs,
+        llvm::Value *) const
+    {
+        auto& builder = compiler.builder();
+        return {builder.CreateFNeg(inputs[0])};
+    }
 }

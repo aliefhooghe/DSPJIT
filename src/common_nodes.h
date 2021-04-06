@@ -90,9 +90,25 @@ namespace DSPJIT {
                 llvm::Value *mutable_state_ptr) const override;
     };
 
+    // Invert node
+
     class invert_node : public compile_node_class {
     public:
         invert_node()
+        :   compile_node_class{1u, 1u}
+        {}
+
+        std::vector<llvm::Value*> emit_outputs(
+                graph_compiler& compiler,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
+    };
+
+    // Negate node
+
+    class negate_node : public compile_node_class {
+    public:
+        negate_node()
         :   compile_node_class{1u, 1u}
         {}
 

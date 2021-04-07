@@ -34,6 +34,20 @@ namespace DSPJIT {
         return {builder.CreateLoad(ptr)};
     }
 
+    // Reference multiply node
+    std::vector<llvm::Value*> reference_multiply_node::emit_outputs(
+        graph_compiler& compiler,
+        const std::vector<llvm::Value*>& inputs,
+        llvm::Value *mutable_state_ptr) const
+    {
+        auto& builder = compiler.builder();
+        auto ptr = builder.CreateIntToPtr(
+            llvm::ConstantInt::get(builder.getIntNTy(sizeof(float*)*8), reinterpret_cast<intptr_t>(_ref)),
+            llvm::Type::getFloatPtrTy(builder.getContext()));
+
+        return {builder.CreateFMul(builder.CreateLoad(ptr), inputs[0])};
+    }
+
     // Add
     std::vector<llvm::Value*> add_node::emit_outputs(
         graph_compiler& compiler,

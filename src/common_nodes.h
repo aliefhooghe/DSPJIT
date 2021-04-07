@@ -43,6 +43,24 @@ namespace DSPJIT {
         const float* _ref;
     };
 
+    //  Reference multiply node
+
+    class reference_multiply_node : public compile_node_class {
+    public:
+        explicit reference_multiply_node(const float* ref)
+        :   compile_node_class{1u, 1u},
+            _ref{ref}
+        {}
+
+        std::vector<llvm::Value*> emit_outputs(
+                graph_compiler& compiler,
+                const std::vector<llvm::Value*>& inputs,
+                llvm::Value *mutable_state_ptr) const override;
+
+    private:
+        const float* _ref;
+    };
+
     // Add
 
     class add_node : public compile_node_class {

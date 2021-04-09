@@ -13,19 +13,19 @@
  *    CYAN       36
  **/
 
-
+#define _LOG_FD (stderr)
 #define _BEGIN_COLOR(bold, color) "\033[" #bold ";" #color "m"
 #define _END_COLOR "\033[0m"
 
 
-#define LOG_ERROR(...)      { fprintf(stdout, _BEGIN_COLOR(1, 31) "[  ERROR  ]\t" _END_COLOR __VA_ARGS__); }
-#define LOG_WARNING(...)    { fprintf(stdout, _BEGIN_COLOR(1, 35) "[ WARNING ]\t" _END_COLOR __VA_ARGS__); }
-#define LOG_INFO(...)       { fprintf(stdout, _BEGIN_COLOR(1, 32) "[  INFO   ]\t" _END_COLOR __VA_ARGS__); }
+#define LOG_ERROR(...)      { fprintf(_LOG_FD, _BEGIN_COLOR(1, 31) "[  ERROR  ]\t" _END_COLOR __VA_ARGS__); }
+#define LOG_WARNING(...)    { fprintf(_LOG_FD, _BEGIN_COLOR(1, 35) "[ WARNING ]\t" _END_COLOR __VA_ARGS__); }
+#define LOG_INFO(...)       { fprintf(_LOG_FD, _BEGIN_COLOR(1, 32) "[  INFO   ]\t" _END_COLOR __VA_ARGS__); }
 
-#ifndef NDEBUG
-#define LOG_DEBUG(...)      { fprintf(stdout, _BEGIN_COLOR(1, 34) "[  DEBUG  ]\t" _END_COLOR __VA_ARGS__); }
+#if !defined(NDEBUG) || defined(ENABLE_DEBUG_LOG)
+#define LOG_DEBUG(...)      { fprintf(_LOG_FD, _BEGIN_COLOR(1, 34) "[  DEBUG  ]\t" _END_COLOR __VA_ARGS__); }
 #else
-#define LOG_DEBUG(...) {  }
+#define LOG_DEBUG(...)      { (void)(__VA_ARGS__); }
 #endif
 
 #endif

@@ -152,7 +152,7 @@ namespace DSPJIT {
             const auto obj_path_string = obj_path.string();
             llvm::SMDiagnostic error;
 
-            LOG_INFO("[external_plugin] Loading module %s\n", obj_path_string.c_str());
+            LOG_DEBUG("[external_plugin] Loading module %s\n", obj_path_string.c_str());
             auto module = llvm::parseIRFile(obj_path_string, error, llvm_context);
             if (!module) {
                 LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path_string.c_str());

@@ -57,7 +57,7 @@ namespace DSPJIT {
             throw std::runtime_error("Failed to initialize execution engine ");
         }
     }
-    
+
     graph_execution_context::~graph_execution_context()
     {
 
@@ -267,7 +267,7 @@ namespace DSPJIT {
          *      Notify process thread that a native function is ready
          */
         if (_compile_done_msg_queue.enqueue({_current_sequence, process_func_pointer, initialize_func_pointer})) {
-            LOG_DEBUG("[graph_execution_context][compile thread] graph compilation finnished, send compile_done message to process thread (seq = %u)\n", _current_sequence);
+            LOG_DEBUG("[graph_execution_context][compile thread] Send compile_done message to process thread (seq = %u)\n", _current_sequence);
         }
         else {
             LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !\n");

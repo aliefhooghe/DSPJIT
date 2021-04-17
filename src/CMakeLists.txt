@@ -42,6 +42,7 @@ set(DSPJIT_SRC
     ir_optimization.h
     lock_free_queue.h
     log.h
+    log.cpp
     node.h
     object_dumper.cpp
     object_dumper.h

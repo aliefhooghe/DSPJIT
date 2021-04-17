@@ -70,7 +70,7 @@ namespace DSPJIT {
         auto function = module->getFunction(_process_symbol);
 
         if (function == nullptr) {
-            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", _process_symbol.c_str())
+            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", _process_symbol.c_str());
             throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
         }
 
@@ -121,7 +121,7 @@ namespace DSPJIT {
         auto function = module->getFunction(initialize_symbol);
 
         if (function == nullptr) {
-            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", initialize_symbol.c_str())
+            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", initialize_symbol.c_str());
             throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
         }
 

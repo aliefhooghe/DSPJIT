@@ -18,7 +18,7 @@ namespace DSPJIT {
         pm.add(llvm::createFunctionInliningPass());
         pm.add(llvm::createEarlyCSEPass());
         pm.add(llvm::createReassociatePass());
-        pm.add(llvm::createConstantPropagationPass());
+        pm.add(llvm::createIPSCCPPass());
         pm.add(llvm::createDeadCodeEliminationPass());
         pm.add(llvm::createPromoteMemoryToRegisterPass());
         pm.add(llvm::createAggressiveDCEPass());

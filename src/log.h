@@ -59,25 +59,25 @@ namespace DSPJIT {
 #if LOG_LEVEL >= LOG_LEVEL_ERROR
 	#define LOG_ERROR(...)		DSPJIT::log_function(ERROR_PREFIX __VA_ARGS__)
 #else
-	#define LOG_ERROR(...)		{ (void)(__VA_ARGS__); }    
+	#define LOG_ERROR(...)		{ }    
 #endif 
 
 #if LOG_LEVEL >= LOG_LEVEL_WARNING
 	#define LOG_WARNING(...)	DSPJIT::log_function(WARNING_PREFIX __VA_ARGS__)
 #else
-	#define LOG_WARNING(...)	{ (void)(__VA_ARGS__); }    
+	#define LOG_WARNING(...)	{  }    
 #endif 
 
 #if LOG_LEVEL >= LOG_LEVEL_INFO
 	#define LOG_INFO(...)		DSPJIT::log_function(INFO_PREFIX __VA_ARGS__)
 #else
-	#define LOG_INFO(...)		{ (void)(__VA_ARGS__); }    
+	#define LOG_INFO(...)		{  }    
 #endif 
 
 #if LOG_LEVEL >= LOG_LEVEL_DEBUG
 	#define LOG_DEBUG(...)		DSPJIT::log_function(DEBUG_PREFIX __VA_ARGS__)
 #else
-	#define LOG_DEBUG(...)		{ (void)(__VA_ARGS__); }    
+	#define LOG_DEBUG(...)		{ }    
 #endif 
 
 #endif /* LOG_H */

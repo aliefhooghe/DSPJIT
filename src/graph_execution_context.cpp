@@ -56,6 +56,9 @@ namespace DSPJIT {
             LOG_ERROR("[graph_execution_context] Failed to initialize execution engine : %s\n", error_string.c_str());
             throw std::runtime_error("Failed to initialize execution engine ");
         }
+
+        // Create library module
+        _library = std::make_unique<llvm::Module>("graph_execution_context.library", _llvm_context);
     }
 
     graph_execution_context::~graph_execution_context()
@@ -63,9 +66,9 @@ namespace DSPJIT {
 
     }
 
-    void graph_execution_context::add_module(std::unique_ptr<llvm::Module>&& module)
+    void graph_execution_context::add_library_module(std::unique_ptr<llvm::Module>&& module)
     {
-        _modules.emplace_back(std::move(module));
+        llvm::Linker::linkModules(*_library, std::move(module));
     }
 
     void graph_execution_context::compile(
@@ -79,9 +82,9 @@ namespace DSPJIT {
         if (_ack_msg_queue.dequeue(msg))
             _process_ack_msg(msg);
 
-        //  Create module and link all dependencies into it
-        auto module = std::make_unique<llvm::Module>("GRAPH_EXECUTION_CONTEXT", _llvm_context);
-        _link_dependency_modules(*module);
+        //  Create module and link library into it
+        auto module = std::make_unique<llvm::Module>("graph_execution_context.dsp", _llvm_context);
+        llvm::Linker::linkModules(*module, llvm::CloneModule(*_library));
 
         _current_sequence++;
         _state_manager.begin_sequence(_current_sequence);
@@ -127,6 +130,17 @@ namespace DSPJIT {
             std::chrono::duration_cast<std::chrono::milliseconds>(end - begin));
     }
 
+    void graph_execution_context::set_global_constant(const std::string& name, float value)
+    {
+        _library->getOrInsertGlobal(name, llvm::Type::getFloatTy(_llvm_context));
+        auto variable = _library->getNamedGlobal(name);
+
+        if (variable == nullptr)
+            throw std::runtime_error("Failed to create global constant variable");
+
+        variable->setInitializer(llvm::ConstantFP::get(_llvm_context, llvm::APFloat{value}));
+    }
+
     bool graph_execution_context::update_program() noexcept
     {
         compile_done_msg msg;
@@ -150,12 +164,6 @@ namespace DSPJIT {
     void graph_execution_context::initialize_state(std::size_t instance_num) noexcept
     {
         _initialize_func(instance_num);
-    }
-
-    void graph_execution_context::_link_dependency_modules(llvm::Module& graph_module)
-    {
-        for (const auto& module : _modules)
-            llvm::Linker::linkModules(graph_module, llvm::CloneModule(*module));
     }
 
     llvm::Function * graph_execution_context::_compile_process_function(

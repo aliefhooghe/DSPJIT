@@ -63,7 +63,7 @@ namespace DSPJIT {
         /** 
          * \brief add a code module, whose functions will be available for nodes
          */
-        void add_module(std::unique_ptr<llvm::Module>&&);
+        void add_library_module(std::unique_ptr<llvm::Module>&&);
 
         /**
          * \brief Compile the current graph into executable code
@@ -73,6 +73,12 @@ namespace DSPJIT {
         void compile(
             node_ref_list input_nodes,
             node_ref_list output_nodes);
+
+        /**
+         * \brief Create if needed and set a global constant,
+         * available for the compile nodes
+         */
+        void set_global_constant(const std::string& name, float value);
 
         /*********************************************
          *   Process Thread API
@@ -112,16 +118,9 @@ namespace DSPJIT {
 
         llvm::LLVMContext& _llvm_context;
         std::unique_ptr<llvm::ExecutionEngine> _execution_engine;   ///< execution engine is used for just in time compilation
-        std::vector<std::unique_ptr<llvm::Module>> _modules{};      ///< modules that are currently available for execution from graph node
+        std::unique_ptr<llvm::Module> _library{};                   ///< code available for execution from graph node
         compile_sequence_t _current_sequence;                       ///< current compilation sequence number
         graph_state_manager _state_manager;                         ///< manage the state of the graph across recompilations
-
-        /**
-         *  \brief Link every needed dependency modules into the graph module
-         *  \param graph_module the graph module, i.e. the module in which the graph
-         *      is being compiled
-         */
-        void _link_dependency_modules(llvm::Module& graph_module);
 
         /**
          * \brief Compile the process function

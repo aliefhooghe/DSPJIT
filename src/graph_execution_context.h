@@ -75,6 +75,12 @@ namespace DSPJIT {
             node_ref_list output_nodes);
 
         /**
+         * \brief Enable/disable printing of IR code
+         * \param enable Print IR if true
+         */
+        void enable_ir_dump(bool enable = true);
+
+        /**
          * \brief Create if needed and set a global constant,
          * available for the compile nodes
          */
@@ -121,6 +127,7 @@ namespace DSPJIT {
         std::unique_ptr<llvm::Module> _library{};                   ///< code available for execution from graph node
         compile_sequence_t _current_sequence;                       ///< current compilation sequence number
         graph_state_manager _state_manager;                         ///< manage the state of the graph across recompilations
+        bool _ir_dump{false};                                       ///< print IR on lons if enabled
 
         /**
          * \brief Compile the process function

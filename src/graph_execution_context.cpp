@@ -1,4 +1,3 @@
-
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/Verifier.h>
@@ -99,11 +98,11 @@ namespace DSPJIT {
         auto initialize_function =
             _state_manager.finish_sequence(*_execution_engine, *module);
 
-#ifdef GAMMOU_PRINT_IR
-        LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
-        ir_helper::print_function(*process_function);
-        ir_helper::print_function(*initialize_function);
-#endif
+        if (_ir_dump) {
+            LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
+            ir_helper::print_function(*process_function);
+            ir_helper::print_function(*initialize_function);
+        }
 
         //  Check generated IR code
         llvm::raw_os_ostream stream{std::cout};
@@ -116,11 +115,11 @@ namespace DSPJIT {
 
         run_optimization(*module);
 
-#ifdef GAMMOU_PRINT_IR
-        LOG_INFO("[graph_execution_context][compile thread] IR code after optimization\n");
-        ir_helper::print_function(*process_function);
-        ir_helper::print_function(*initialize_function);
-#endif
+        if (_ir_dump) {
+            LOG_INFO("[graph_execution_context][compile thread] IR code after optimization\n");
+            ir_helper::print_function(*process_function);
+            ir_helper::print_function(*initialize_function);
+        }
 
         //  Compile LLVM IR to native code
         _emit_native_code(std::move(module), process_function, initialize_function);
@@ -128,6 +127,11 @@ namespace DSPJIT {
         auto end = std::chrono::steady_clock::now();
         LOG_INFO("[graph_execution_context][compile thread] graph compilation finished (%u ms)\n",
             std::chrono::duration_cast<std::chrono::milliseconds>(end - begin));
+    }
+
+    void graph_execution_context::enable_ir_dump(bool enable)
+    {
+        _ir_dump = true;
     }
 
     void graph_execution_context::set_global_constant(const std::string& name, float value)

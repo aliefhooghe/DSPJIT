@@ -138,8 +138,12 @@ namespace DSPJIT {
                     LOG_DEBUG("[graph_execution_context][compile thread] ~delete_sequence : delete module and %u node stats\n",
                         static_cast<unsigned int>(_node_states.size()));
                     //  llvm execution transfert module's ownership,so we must delete it
-                    _engine->removeModule(_module);
-                    delete _module;
+                    if (_engine->removeModule(_module)) {
+                        delete _module;
+                    }
+                    else {
+                        LOG_ERROR("[graph_execution_context][compile thread] ~delete_sequence : cannot delete the module !\n");
+                    }
                 }
             }
             delete_sequence(const delete_sequence&) = delete;

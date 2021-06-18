@@ -27,19 +27,17 @@ namespace DSPJIT {
         unsigned int output_id)
     {
         if (node == nullptr)
-            return llvm::ConstantFP::get(
-                _builder.getContext(),
-                llvm::APFloat::getZero(llvm::APFloat::IEEEsingle()));
+            return create_zero();
 
         auto value_it = _nodes_value.find(node);
 
         if (value_it != _nodes_value.end()) {
-            //  This node have been visited : there is a cycle
+            //  This node have already been visited
             auto& value_vec = value_it->second;
 
-            //  If the cycle was not already solved
+            //  There is a cycle that was not already solved
             if (value_vec[output_id] == nullptr) {
-                auto& state = _state_mgr.get_or_create(node);
+                auto& state = _state_mgr.get_or_create(*node);
                 auto cycle_ptr = 
                     state.get_cycle_state_ptr(_builder, _instance_num, output_id);
 
@@ -55,7 +53,7 @@ namespace DSPJIT {
             value_it = _nodes_value.emplace_hint(value_it, node, std::vector<llvm::Value*>{node->get_output_count(), nullptr});
 
             //  Compile node
-            compile_node(node, value_it->second);
+            compile_node(*node, value_it->second);
 
             _state_mgr.declare_used_node(node);
 
@@ -64,33 +62,48 @@ namespace DSPJIT {
     }
 
     void graph_compiler::compile_node(
-        const compile_node_class* node,
+        const compile_node_class& node,
         std::vector<llvm::Value*>& output)
     {
-        const auto input_count = node->get_input_count();
+        const auto input_count = node.get_input_count();
         std::vector<llvm::Value*> input_values(input_count);
         auto& state = _state_mgr.get_or_create(node);
 
-        assert(output.size() == node->get_output_count());
+        assert(output.size() == node.get_output_count());
 
         //  Compile dependencies input
         for (auto i = 0u; i < input_count; ++i) {
             unsigned int output_id = 0u;
-            const auto *input = node->get_input(i, output_id);
+            const auto *input = node.get_input(i, output_id);
             input_values[i] = node_value(input, output_id);
         }
 
-        //  get state ptr
+        //  get mutable state and static memory ptr if needed
         llvm::Value *state_ptr = nullptr;
+        llvm::Value *static_memory_chunk = nullptr;
 
-        if (node->mutable_state_size != 0u) {
-            // state_ptr <- base + instance_num * state size
+        if (node.mutable_state_size != 0u)
             state_ptr = state.get_mutable_state_ptr(_builder, _instance_num);
+
+        if (node.use_static_memory) {
+            auto memory_chunk = _state_mgr.get_static_memory_ref(_builder, node);
+        
+            if (memory_chunk == nullptr) {
+                // No memory chunk was registered for this node : it can't be compiled
+                // => Set output with dummy zeros
+                for (auto idx = 0u; idx < output.size(); ++idx)
+                    output[idx] = create_zero();
+                return;
+            }
+            else {
+                // Use the registered static memory chunk for compilation
+                static_memory_chunk = memory_chunk;
+            }
         }
 
         // compile processing
         const auto output_values =
-            node->emit_outputs(*this, input_values, state_ptr);
+            node.emit_outputs(*this, input_values, state_ptr, static_memory_chunk);
 
         for (auto idx = 0u; idx < output.size(); ++idx) {
 
@@ -108,4 +121,10 @@ namespace DSPJIT {
         }
     }
 
+    llvm::Value *graph_compiler::create_zero()
+    {
+        return llvm::ConstantFP::get(
+                _builder.getContext(),
+                llvm::APFloat::getZero(llvm::APFloat::IEEEsingle()));
+    }
 }

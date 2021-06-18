@@ -13,9 +13,11 @@ namespace DSPJIT {
     compile_node_class::compile_node_class(
             const unsigned int input_count,
             const unsigned int output_node,
-            std::size_t mutable_state_size_bytes)
+            std::size_t mutable_state_size_bytes,
+            bool use_static_mem)
     : node<compile_node_class>{input_count, output_node},
-            mutable_state_size{mutable_state_size_bytes}
+            mutable_state_size{mutable_state_size_bytes},
+            use_static_memory{use_static_mem}
     {}
 
 

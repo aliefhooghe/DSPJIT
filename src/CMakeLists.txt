@@ -22,30 +22,30 @@ message (STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 ## DSPJIT
 
 set(DSPJIT_SRC
-    common_nodes.cpp
-    common_nodes.h
-    compile_node_class.cpp
-    compile_node_class.h
-    composite_node.cpp
-    composite_node.h
-    external_plugin.cpp
-    external_plugin.h
-    graph_compiler.cpp
-    graph_compiler.h
-    graph_execution_context.cpp
-    graph_execution_context.h
-    graph_state_manager.cpp
-    graph_state_manager.h
-    ir_helper.cpp
-    ir_helper.h
-    ir_optimization.cpp
-    ir_optimization.h
-    lock_free_queue.h
-    log.h
-    log.cpp
-    node.h
-    object_dumper.cpp
-    object_dumper.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/common_nodes.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/common_nodes.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/compile_node_class.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/compile_node_class.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/composite_node.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/composite_node.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/graph_compiler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/graph_compiler.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/graph_execution_context.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/graph_execution_context.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/graph_state_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/graph_state_manager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ir_helper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ir_helper.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/ir_optimization.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ir_optimization.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/lock_free_queue.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/log.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/log.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/node.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/object_dumper.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/object_dumper.h
 )
 
 
@@ -57,7 +57,11 @@ target_link_libraries(DSPJIT PUBLIC LLVMCore LLVMTarget LLVMExecutionEngine LLVM
 
 
 # Tests
-add_executable(run_test test.cpp)
+add_executable(run_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_node.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_composite_node.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_execution_context.cpp)
 target_link_libraries(run_test PRIVATE DSPJIT Catch2::Catch2)
 
 

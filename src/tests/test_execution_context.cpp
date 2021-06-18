@@ -1,6 +1,4 @@
 
-
-#define CATCH_CONFIG_MAIN  // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 
 #include <llvm/IR/LLVMContext.h>
@@ -13,47 +11,6 @@
 
 using namespace llvm;
 using namespace DSPJIT;
-
-
-/**
- *
- *      Node
- *
- *
- **/
-
-class test_node : public node<test_node> {
-    public:
-        test_node(const unsigned int input_count):
-            node<test_node>(input_count, 1u)
-        {}
-};
-
-TEST_CASE("Node initial state", "node_initial_state")
-{
-    test_node n{2u};
-
-    REQUIRE(n.get_input_count() == 2u);
-    REQUIRE(n.get_input(0u) == nullptr);
-    REQUIRE(n.get_input(1u) == nullptr);
-}
-
-TEST_CASE("Node Conection", "node_connection")
-{
-    test_node n1{0u}, n3{2u};
-
-    {
-        test_node n2{0u};
-        n1.connect(n3, 0u);
-        n2.connect(n3, 1u);
-
-        REQUIRE(n3.get_input(0u) == &n1);
-        REQUIRE(n3.get_input(1u) == &n2);
-    }
-
-    REQUIRE(n3.get_input(0u) == &n1);
-    REQUIRE(n3.get_input(1u) == nullptr);
-}
 
 /**
  *
@@ -173,7 +130,7 @@ TEST_CASE("cycle state : integrator")
         context.process(&input, &output);
         REQUIRE(output == Approx(input));
 
-    }   //  delete add
+    } //  delete add
 
     //  The program is independent from the graph (graph = source code)
     context.process(&input, &output);
@@ -219,41 +176,98 @@ TEST_CASE("node state : z-1")
     REQUIRE(output == Approx(2.f));
 }
 
-/**
- *
- *      Composite Compile Node
- *
- **/
+class static_memory_simple_test : public compile_node_class
+{
+public:
+    static_memory_simple_test()
+        : compile_node_class(0u, 1u, 0u, true)
+    {
+        // 1 input, float size static memory
+    }
 
-TEST_CASE("Composite Compile Node", "composite_node")
+    std::vector<llvm::Value *> emit_outputs(
+        graph_compiler &compiler,
+        const std::vector<llvm::Value *> &,
+        llvm::Value *,
+        llvm::Value *static_memory) const override
+    {
+        // Load the static memory chunk to outputs
+        auto &builder = compiler.builder();
+        auto float_ptr = builder.CreateBitCast(
+            static_memory, llvm::Type::getFloatPtrTy(builder.getContext()));
+        return { builder.CreateLoad(float_ptr) };
+    }
+};
+
+static std::vector<uint8_t> create_dummy_chunk(float value)
+{
+    std::vector<uint8_t> data(sizeof(float));
+    std::memcpy(data.data(), &value, sizeof(float));
+    return data;
+}
+
+TEST_CASE("Static memory : simple")
 {
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
-    compile_node_class in{0u, 1u}, out{1u, 0u};
-    float input, output;
+    compile_node_class out{1u, 0u};
+    static_memory_simple_test node;
 
-    add_node add{};
-    composite_node composite{1, 1};
+    float output = 1.f;
 
-    composite.input().connect(add, 0);
-    composite.input().connect(add, 1);
-    add.connect(composite.output(), 0);
+    node.connect(out, 0);
 
-    in.connect(composite, 0);
-    composite.connect(out, 0);
-
-    context.compile({in}, {out});
+    // First compilation, without registering static memory
+    context.compile({}, {out});
     context.update_program();
+    context.process(nullptr, &output);
 
-    input = 1.f;
-    context.process(&input, &output);
-    REQUIRE(output == Approx(2.f));
-
-    composite.output().disconnect(0);
-
-    context.compile({in}, {out});
-    context.update_program();
-    context.process(&input, &output);
     REQUIRE(output == Approx(0.f));
-}
 
+    // Register a static memory chunk and recompile
+    context.register_static_memory_chunk(node, create_dummy_chunk(42.f));
+    context.compile({}, {out});
+    context.update_program();
+    context.process(nullptr, &output);
+
+    REQUIRE(output == Approx(42.f));
+
+    // Free the static memory chunk
+    context.free_static_memory_chunk(node);
+
+    // it still exist for the process thread
+    context.process(nullptr, &output);
+    REQUIRE(output == Approx(42.f));
+
+    // recompile
+    context.compile({}, {out});
+
+    // it still exist for the process thread (program have not be updated)
+    context.process(nullptr, &output);
+    REQUIRE(output == Approx(42.f));
+
+    // chunk removal was taken into account
+    context.update_program();
+    context.process(nullptr, &output);
+    REQUIRE(output == Approx(0.f));
+
+    // Set another chunk
+    context.register_static_memory_chunk(node, create_dummy_chunk(11.f));
+    context.compile({}, {out});
+    context.update_program();
+    context.process(nullptr, &output);
+    REQUIRE(output == Approx(11.f));
+
+    // Change chunk
+    context.register_static_memory_chunk(node, create_dummy_chunk(45.f));
+    context.process(nullptr, &output);
+    REQUIRE(output == Approx(11.f));
+
+    context.compile({}, {out});
+    context.process(nullptr, &output);
+    REQUIRE(output == Approx(11.f));
+
+    context.update_program();
+    context.process(nullptr, &output);
+    REQUIRE(output == Approx(45.f));
+}

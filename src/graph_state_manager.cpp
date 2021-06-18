@@ -65,6 +65,47 @@ namespace DSPJIT {
             _cycle_state.resize(cycle_state_size);
     }
 
+    // Delete sequence implementation
+
+    graph_state_manager::delete_sequence::delete_sequence(
+        llvm::ExecutionEngine* engine,
+        llvm::Module *module) noexcept
+    :   _engine{engine}, _module{module}
+    {
+    }
+
+    graph_state_manager::delete_sequence::~delete_sequence()
+    {
+        if (_engine && _module) {
+            LOG_DEBUG("[graph_execution_context][compile thread] ~delete_sequence : delete module and %u node stats\n",
+                      static_cast<unsigned int>(_node_states.size()));
+            //  llvm execution transfert module's ownership,so we must delete it
+            if (_engine->removeModule(_module))
+                delete _module;
+            else
+                LOG_ERROR("[graph_execution_context][compile thread] ~delete_sequence : cannot delete the module !\n");
+        }
+    }
+
+    graph_state_manager::delete_sequence::delete_sequence(delete_sequence &&o) noexcept
+        : _engine{o._engine}, _module{o._module}, _node_states{std::move(o._node_states)}
+    {
+        o._engine = nullptr;
+        o._module = nullptr;
+    }
+
+    void graph_state_manager::delete_sequence::add_deleted_node(mutable_node_state && state)
+    {
+        _node_states.emplace_back(std::move(state));
+    }
+
+    void graph_state_manager::delete_sequence::add_deleted_static_data(std::vector<uint8_t>&& data)
+    {
+        _static_data_chunks.emplace_back(std::move(data));
+    }
+
+    // Graph state manager implementation
+
     graph_state_manager::graph_state_manager(
         llvm::LLVMContext& llvm_context,
         std::size_t instance_count,
@@ -104,7 +145,7 @@ namespace DSPJIT {
         auto previous_delete_sequence_it = _delete_sequence.rbegin();
 
         //  Collect unused node states :
-        for (auto state_it = _state.begin(); state_it != _state.end();) {
+        for (auto state_it = _mutable_state.begin(); state_it != _mutable_state.end();) {
             //  avoid iterator invalidation
             const auto cur_it = state_it++;
 
@@ -115,7 +156,7 @@ namespace DSPJIT {
                 previous_delete_sequence_it->second.add_deleted_node(std::move(cur_it->second));
 
                 //  Remove the coresponding entry in state store
-                _state.erase(cur_it);
+                _mutable_state.erase(cur_it);
             }
             else
             {
@@ -126,10 +167,22 @@ namespace DSPJIT {
                 if (node.mutable_state_size == 0u)
                     continue;
 
+                // Try to retrieve static memory chunk if the node ise static memory
+                llvm::Value *static_memory = nullptr;
+                if (node.use_static_memory) {
+                    const auto static_mem_ref = get_static_memory_ref(builder, node);
+
+                    if (static_mem_ref != nullptr)
+                        static_memory = static_mem_ref;
+                    else
+                        continue;   // Ignore this node if there is not available static memory chink for the node
+                }
+
                 //  emit the node mutable state initialization code
                 node.initialize_mutable_state(
                     builder,
-                    cur_it->second.get_mutable_state_ptr(builder, instance_num_value));
+                    cur_it->second.get_mutable_state_ptr(builder, instance_num_value),
+                    static_memory);
             }
         }
 
@@ -150,26 +203,72 @@ namespace DSPJIT {
             _delete_sequence.lower_bound(seq));
     }
 
-    graph_state_manager::mutable_node_state& graph_state_manager::get_or_create(const compile_node_class *node)
+    graph_state_manager::mutable_node_state& graph_state_manager::get_or_create(const compile_node_class& node)
     {
-        auto state_it = _state.find(node);
+        auto state_it = _mutable_state.find(&node);
 
-        if (state_it == _state.end()) {
+        if (state_it == _mutable_state.end()) {
             //  Create the state if needed
-            state_it = _state.emplace(
-                node,
-                mutable_node_state{_llvm_context, node->mutable_state_size, _instance_count, node->get_output_count()}).first;
+            state_it = _mutable_state.emplace(
+                &node,
+                mutable_node_state{_llvm_context, node.mutable_state_size, _instance_count, node.get_output_count()}).first;
         }
         else {
-            if (node->get_output_count() != state_it->second._node_output_count) {
-                state_it->second._update_output_count(node->get_output_count());
+            if (node.get_output_count() != state_it->second._node_output_count) {
+                state_it->second._update_output_count(node.get_output_count());
             }
         }
 
         return state_it->second;
     }
 
+    void graph_state_manager::register_static_memory_chunk(const compile_node_class& node, std::vector<uint8_t>&& data)
+    {
+        const auto chunk_it = _static_memory.find(&node);
+
+        if (chunk_it == _static_memory.end()) {
+            _static_memory.emplace(&node, std::move(data));
+        }
+        else {
+            _trash_static_memory_chunk(chunk_it);   // trash the old chunk
+            chunk_it->second = std::move(data);     // put the new chunk in place
+        }
+    }
+
+    void graph_state_manager::free_static_memory_chunk(const compile_node_class& node)
+    {
+        auto chunk_it = _static_memory.find(&node);
+
+        if (chunk_it != _static_memory.end()){
+            _trash_static_memory_chunk(chunk_it);
+            _static_memory.erase(chunk_it);
+        }
+        else {
+            throw std::invalid_argument("Cannot free static memory chunk : None was registered for this node");
+        }
+    }
+
+    llvm::Value *graph_state_manager::get_static_memory_ref(llvm::IRBuilder<>& builder, const compile_node_class& node)
+    {
+        const auto it = _static_memory.find(&node);
+
+        if (it == _static_memory.end()) {
+            return nullptr;
+        }
+        else {
+            return builder.CreateIntToPtr(
+                llvm::ConstantInt::get(
+                    builder.getIntNTy(sizeof(float*) * 8),
+                    reinterpret_cast<intptr_t>(it->second.data())),
+                builder.getInt8PtrTy());
+        }
+    }
+
+    void graph_state_manager::_trash_static_memory_chunk(static_memory_map::iterator chunk_it)
+    {
+        auto previous_delete_sequence_it = _delete_sequence.rbegin();
+
+        // Move the chunk into the delete sequence
+        previous_delete_sequence_it->second.add_deleted_static_data(std::move(chunk_it->second));
+    }
 }
-
-
-

@@ -33,7 +33,8 @@ namespace DSPJIT {
         compile_node_class(
             const unsigned int input_count,
             const unsigned int output_count,
-            std::size_t mutable_state_size = 0u);
+            std::size_t mutable_state_size = 0u,
+            bool use_static_memory = false );
         
         compile_node_class(const compile_node_class&) = delete;
         compile_node_class(compile_node_class&&) = delete;
@@ -43,25 +44,30 @@ namespace DSPJIT {
          * \brief 
          * \param builder
          * \param mutable_state
+         * \param static_memory
          */
         virtual void initialize_mutable_state(
             llvm::IRBuilder<>& builder,
-            llvm::Value *mutable_state) const
+            llvm::Value *mutable_state,
+            llvm::Value *static_memory) const
         {}
 
         /**
          * \param compiler
          * \param inputs
          * \param mutable_state
+         * \param static_memory
          * \return 
          */
         virtual std::vector<llvm::Value*> emit_outputs(
             graph_compiler& compiler,
             const std::vector<llvm::Value*>& inputs,
-            llvm::Value *mutable_state) const
+            llvm::Value *mutable_state,
+            llvm::Value *static_memory) const
         { return {}; }
 
         const std::size_t mutable_state_size;
+        const bool use_static_memory;
     };
 
 }

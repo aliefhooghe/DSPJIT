@@ -14,7 +14,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> constant_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr) const
+        llvm::Value*, llvm::Value*) const
     {
         using namespace llvm;
         return {ConstantFP::get(compiler.builder().getContext(), APFloat(_value))};
@@ -24,7 +24,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> reference_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr) const
+        llvm::Value*, llvm::Value*) const
     {
         auto& builder = compiler.builder();
         auto ptr = builder.CreateIntToPtr(
@@ -38,7 +38,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> reference_multiply_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr) const
+        llvm::Value*, llvm::Value*) const
     {
         auto& builder = compiler.builder();
         auto ptr = builder.CreateIntToPtr(
@@ -52,7 +52,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> add_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr) const
+        llvm::Value*, llvm::Value*) const
     {
         return {compiler.builder().CreateFAdd(inputs[0], inputs[1])};
     }
@@ -61,7 +61,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> mul_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr) const
+        llvm::Value*, llvm::Value*) const
     {
         return {compiler.builder().CreateFMul(inputs[0], inputs[1])};
     }
@@ -70,7 +70,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> last_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr) const
+        llvm::Value *mutable_state_ptr, llvm::Value*) const
     {
         auto& builder = compiler.builder();
 
@@ -88,7 +88,7 @@ namespace DSPJIT {
 
     void last_node::initialize_mutable_state(
         llvm::IRBuilder<>& builder,
-        llvm::Value *mutable_state) const
+        llvm::Value *mutable_state, llvm::Value*) const
     {
         auto zero = llvm::ConstantFP::get(
         builder.getContext(),
@@ -101,7 +101,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> invert_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *) const
+        llvm::Value*, llvm::Value*) const
     {
         auto& builder = compiler.builder();
         return {builder.CreateFDiv(
@@ -111,7 +111,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> negate_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *) const
+        llvm::Value*, llvm::Value*) const
     {
         auto& builder = compiler.builder();
         return {builder.CreateFNeg(inputs[0])};

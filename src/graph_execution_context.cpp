@@ -145,6 +145,22 @@ namespace DSPJIT {
         variable->setInitializer(llvm::ConstantFP::get(_llvm_context, llvm::APFloat{value}));
     }
 
+    void graph_execution_context::register_static_memory_chunk(const compile_node_class& node, std::vector<uint8_t>&& data)
+    {
+        if (!node.use_static_memory)
+            throw std::invalid_argument("graph_execution_context: this node does not use static memory");
+
+        _state_manager.register_static_memory_chunk(node, std::move(data));
+    }
+
+    void graph_execution_context::free_static_memory_chunk(const compile_node_class& node)
+    {
+        if (!node.use_static_memory)
+            throw std::invalid_argument("graph_execution_context: this node does not use static memory");
+
+        _state_manager.free_static_memory_chunk(node);
+    }
+
     bool graph_execution_context::update_program() noexcept
     {
         compile_done_msg msg;
@@ -304,5 +320,4 @@ namespace DSPJIT {
         LOG_DEBUG("[graph_execution_context][compile thread] received acknowledgment from process thread (seq = %u)\n", msg);
         _state_manager.using_sequence(msg);
     }
-
 }

@@ -34,12 +34,12 @@ namespace DSPJIT {
 
         void initialize_mutable_state(
             llvm::IRBuilder<>& builder,
-            llvm::Value *mutable_state) const override;
+            llvm::Value *mutable_state, llvm::Value*) const override;
 
         std::vector<llvm::Value*> emit_outputs(
             graph_compiler& compiler,
             const std::vector<llvm::Value*>& inputs,
-            llvm::Value *mutable_state_ptr) const override;
+            llvm::Value *mutable_state_ptr, llvm::Value*) const override;
     private:
         const std::string _process_symbol;
         const std::optional<std::string> _initialize_symbol;
@@ -60,7 +60,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> external_plugin_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr) const
+        llvm::Value *mutable_state_ptr, llvm::Value*) const
     {
         auto& builder = compiler.builder();
         const auto input_count = get_input_count();
@@ -111,7 +111,7 @@ namespace DSPJIT {
 
     void external_plugin_node::initialize_mutable_state(
             llvm::IRBuilder<>& builder,
-        llvm::Value *mutable_state) const
+        llvm::Value *mutable_state, llvm::Value*) const
     {
         if (!_initialize_symbol.has_value() || mutable_state == nullptr)
             return;

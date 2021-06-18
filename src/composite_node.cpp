@@ -15,7 +15,7 @@ namespace DSPJIT {
     std::vector<llvm::Value*> composite_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *) const
+        llvm::Value*, llvm::Value*) const
     {
         //  Map composite node input value to internal input node
         compiler.assign_values(&_input, std::vector<llvm::Value*>{inputs});

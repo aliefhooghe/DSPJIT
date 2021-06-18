@@ -20,7 +20,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value*, llvm::Value*) const override;
     private:
         const float _value;
     };
@@ -37,7 +37,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value*, llvm::Value*) const override;
 
     private:
         const float* _ref;
@@ -55,7 +55,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value*, llvm::Value*) const override;
 
     private:
         const float* _ref;
@@ -72,7 +72,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value*, llvm::Value*) const override;
     };
 
     // Mull
@@ -86,7 +86,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value*, llvm::Value*) const override;
     };
 
     // Z^-1
@@ -100,12 +100,12 @@ namespace DSPJIT {
 
         void initialize_mutable_state(
                 llvm::IRBuilder<>& builder,
-                llvm::Value *mutable_state) const override;
+                llvm::Value *mutable_state, llvm::Value*) const override;
 
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value *mutable_state_ptr, llvm::Value*) const override;
     };
 
     // Invert node
@@ -119,7 +119,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value*, llvm::Value*) const override;
     };
 
     // Negate node
@@ -133,7 +133,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr) const override;
+                llvm::Value*, llvm::Value*) const override;
     };
 
 

@@ -15,7 +15,7 @@ namespace DSPJIT {
         std::vector<llvm::Value*> emit_outputs(
             graph_compiler& compiler,
             const std::vector<llvm::Value*>& inputs,
-            llvm::Value * /* stateless node */) const override;
+            llvm::Value* /* stateless */, llvm::Value*) const override;
 
         auto& input() noexcept { return _input; }
         auto& output() noexcept { return _output; }

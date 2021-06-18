@@ -3,6 +3,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/IRBuilder.h>
@@ -20,7 +21,7 @@ namespace DSPJIT {
 
     /**
      * \class graph_state_manager
-     * \brief manage the state of a graph program accross recompilations 
+     * \brief manage the state of a graph program accross recompilations
      */
     class graph_state_manager {
 
@@ -44,7 +45,7 @@ namespace DSPJIT {
             mutable_node_state(mutable_node_state&&) = default;
 
             /**
-             * \brief Return a pointer to the node cycle resolving state as a llvm::Value 
+             * \brief Return a pointer to the node cycle resolving state as a llvm::Value
              */
             llvm::Value *get_cycle_state_ptr(
                 llvm::IRBuilder<>& builder,
@@ -52,7 +53,7 @@ namespace DSPJIT {
                 std::size_t output_id);
 
             /**
-             * \brief Return a pointer to the node muteable state
+             * \brief Return a pointer to the node mutable state
              */
             llvm::Value *get_mutable_state_ptr(
                 llvm::IRBuilder<>& builder,
@@ -69,15 +70,23 @@ namespace DSPJIT {
             std::size_t _size;
         };
 
+        class mutable_node_state;
+
+        /****************************************
+         *
+         *      Graph state manager API
+         *
+         ****************************************/
+
         /**
          * \brief
          * \param llvm_context LLVM context used for ir code generation
          * \param instance_count The number of graph state instances to be managed
-         * \param initial_sequence_number The initial compilation sequence number 
+         * \param initial_sequence_number The initial compilation sequence number
          */
         graph_state_manager(
             llvm::LLVMContext& llvm_context,
-            std::size_t instance_count, 
+            std::size_t instance_count,
             compile_sequence_t initial_sequence_number);
 
         /**
@@ -104,7 +113,7 @@ namespace DSPJIT {
          * \return a pointer to the graph state initialize function (compiled in module)
          */
         llvm::Function *finish_sequence(
-            llvm::ExecutionEngine& engine, 
+            llvm::ExecutionEngine& engine,
             llvm::Module& module);
 
         /**
@@ -115,60 +124,64 @@ namespace DSPJIT {
         void using_sequence(const compile_sequence_t seq);
 
         /**
-         * \brief return a reference to the stored node's state. State is created if it doesn't exist  
+         * \brief return a reference to the stored node's state. State is created if it doesn't exist
          * \param node the node whose state is needed
          */
-        mutable_node_state& get_or_create(const compile_node_class *node);
+        mutable_node_state& get_or_create(const compile_node_class& node);
 
+        /**
+         * \brief Set data used for static memory
+         */
+        void register_static_memory_chunk(const compile_node_class& node, std::vector<uint8_t>&& chunk);
+
+        /**
+         * \brief Free the registered static memory chunk for the given node
+         * \note This chunk will be freed when it will be safe to
+         */
+        void free_static_memory_chunk(const compile_node_class& node);
+
+        /**
+         * \brief Return a pointer to the static memory chunk registered for this node
+         */
+        llvm::Value *get_static_memory_ref(llvm::IRBuilder<>& builder, const compile_node_class& node);
+
+        /**
+         *
+         */
+        llvm::LLVMContext& get_llvm_context() noexcept { return _llvm_context; }
     private:
 
         /**
          * \class delete_sequence
-         * \brief 
+         * \brief
          */
         class delete_sequence {
         public:
-            explicit delete_sequence(llvm::ExecutionEngine* e = nullptr, llvm::Module *m = nullptr) noexcept
-            : _engine{e},  _module{m}
-            {}
-
-            ~delete_sequence()
-            {
-                if (_engine && _module) {
-                    LOG_DEBUG("[graph_execution_context][compile thread] ~delete_sequence : delete module and %u node stats\n",
-                        static_cast<unsigned int>(_node_states.size()));
-                    //  llvm execution transfert module's ownership,so we must delete it
-                    if (_engine->removeModule(_module)) {
-                        delete _module;
-                    }
-                    else {
-                        LOG_ERROR("[graph_execution_context][compile thread] ~delete_sequence : cannot delete the module !\n");
-                    }
-                }
-            }
+            explicit delete_sequence(llvm::ExecutionEngine* e = nullptr, llvm::Module *m = nullptr) noexcept;
             delete_sequence(const delete_sequence&) = delete;
+            delete_sequence(delete_sequence&& o) noexcept;
+            ~delete_sequence();
 
-            delete_sequence(delete_sequence&& o) noexcept
-            : _engine{o._engine}, _module{o._module}, _node_states{std::move(o._node_states)}
-            {
-                o._engine = nullptr;
-                o._module = nullptr;
-            }
-
-            void add_deleted_node(mutable_node_state && state) { _node_states.emplace_back(std::move(state)); }
+            void add_deleted_node(mutable_node_state && state);
+            void add_deleted_static_data(std::vector<uint8_t>&& data);
 
         private:
             llvm::ExecutionEngine* _engine;
             llvm::Module *_module{nullptr};
-            std::vector<mutable_node_state> _node_states;
+            std::vector<mutable_node_state> _node_states;               //< Nodes states to be removed when the sequence is over
+            std::vector<std::vector<uint8_t>> _static_data_chunks{};    //< Static memory chunk to be removed when the sequence is over
         };
 
         using state_map = std::map<const compile_node_class*, mutable_node_state>;
+        using static_memory_map = std::map<const compile_node_class*, std::vector<uint8_t>>;
         using delete_sequence_map = std::map<compile_sequence_t, delete_sequence>;
 
+        void _trash_static_memory_chunk(static_memory_map::iterator chunk_it);
+
         llvm::LLVMContext& _llvm_context;
-        state_map _state{};
-        std::set<const compile_node_class*> _sequence_used_nodes{}; 
+        state_map _mutable_state{};
+        static_memory_map _static_memory{};
+        std::set<const compile_node_class*> _sequence_used_nodes{};
         delete_sequence_map _delete_sequence{};
         const std::size_t _instance_count;
         compile_sequence_t _current_sequence_number;

@@ -50,8 +50,10 @@ namespace DSPJIT {
 
     private:
         void compile_node(
-            const compile_node_class* node,
+            const compile_node_class& node,
             std::vector<llvm::Value*>& output);
+
+        llvm::Value *create_zero();
 
         value_memoize_map _nodes_value{};   ///< Used to memoize the output values produced by nodes during compilation
         llvm::IRBuilder<>& _builder;        ///< builder used to emit ir code at relevant insert point

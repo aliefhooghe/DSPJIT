@@ -17,7 +17,7 @@ namespace DSPJIT {
      * \brief graph_execution_context
      */
     class graph_execution_context {
-        
+
 
         /* Native compiled function types */
         using native_process_func = void (*)(std::size_t instance_num, const float *inputs, float *outputs);
@@ -53,14 +53,14 @@ namespace DSPJIT {
             std::size_t instance_count = 1u,
             const opt_level level = opt_level::Default,
             const llvm::TargetOptions& options = llvm::TargetOptions{});
-        
+
         ~graph_execution_context();
 
         /*********************************************
          *   Compile Thread API
          *********************************************/
-        
-        /** 
+
+        /**
          * \brief add a code module, whose functions will be available for nodes
          */
         void add_library_module(std::unique_ptr<llvm::Module>&&);
@@ -68,7 +68,7 @@ namespace DSPJIT {
         /**
          * \brief Compile the current graph into executable code
          * \param input_nodes the nodes which represents the graph inputs
-         * \param output_nodes the nodes which represents the graph outputs 
+         * \param output_nodes the nodes which represents the graph outputs
          */
         void compile(
             node_ref_list input_nodes,
@@ -85,6 +85,18 @@ namespace DSPJIT {
          * available for the compile nodes
          */
         void set_global_constant(const std::string& name, float value);
+
+        /**
+         * \brief Register a memory chunk available as static memory for the given node
+         * \note This chunk is not automatically deallocated when the node is not anymore in
+         * the compiled circuit.
+         */
+        void register_static_memory_chunk(const compile_node_class& node, std::vector<uint8_t>&& data);
+
+        /**
+         * \brief Free the static memory chunk registered for the given node
+         */
+        void free_static_memory_chunk(const compile_node_class& node);
 
         /*********************************************
          *   Process Thread API
@@ -117,7 +129,7 @@ namespace DSPJIT {
         void initialize_state(std::size_t instance_num = 0u) noexcept;
 
     private:
-        
+
         /*********************************************
          *   Used by Compile Thread
          *********************************************/
@@ -204,7 +216,7 @@ namespace DSPJIT {
     };
 
 
- 
+
 
 }
 

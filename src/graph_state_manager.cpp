@@ -243,8 +243,8 @@ namespace DSPJIT {
             _trash_static_memory_chunk(chunk_it);
             _static_memory.erase(chunk_it);
         }
-        else {
-            throw std::invalid_argument("Cannot free static memory chunk : None was registered for this node");
+        else { // not an error
+            LOG_WARNING("[state_manager] free_static_memory_chunk : no chunk to free for node @%p\n", &node);
         }
     }
 

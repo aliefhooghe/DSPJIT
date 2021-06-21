@@ -26,11 +26,9 @@ namespace DSPJIT {
 
     public:
         explicit external_plugin_node(
-            unsigned int input_count,
-            unsigned int output_count,
+            const external_plugin::process_info& info,
             const std::string& process_symbol,
-            const std::optional<std::string>& initialize_symbol,
-            std::size_t mutable_state_size);
+            const std::optional<std::string>& initialize_symbol);
 
         void initialize_mutable_state(
             llvm::IRBuilder<>& builder,
@@ -41,17 +39,19 @@ namespace DSPJIT {
             const std::vector<llvm::Value*>& inputs,
             llvm::Value *mutable_state_ptr, llvm::Value*) const override;
     private:
+        llvm::Value *_convert_ptr_arg(llvm::IRBuilder<>& builder, const llvm::Function *func, int arg_index, llvm::Value *ptr) const;
+
         const std::string _process_symbol;
         const std::optional<std::string> _initialize_symbol;
     };
 
     external_plugin_node::external_plugin_node(
-        unsigned int input_count,
-        unsigned int output_count,
+        const external_plugin::process_info& info,
         const std::string& process_symbol,
-        const std::optional<std::string>& initialize_symbol,
-        std::size_t mutable_state_size)
-    :   compile_node_class{input_count, output_count, mutable_state_size},
+        const std::optional<std::string>& initialize_symbol)
+    :   compile_node_class{
+            info.input_count, info.output_count,
+            info.mutable_state_size, info.use_static_memory},
         _process_symbol{process_symbol},
         _initialize_symbol{initialize_symbol}
     {
@@ -60,48 +60,44 @@ namespace DSPJIT {
     std::vector<llvm::Value*> external_plugin_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr, llvm::Value*) const
+        llvm::Value *mutable_state_ptr, llvm::Value *static_mem) const
     {
         auto& builder = compiler.builder();
-        const auto input_count = get_input_count();
-        const auto output_count = get_output_count();
-
         auto module = builder.GetInsertBlock()->getModule();
         auto function = module->getFunction(_process_symbol);
 
-        if (function == nullptr) {
-            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", _process_symbol.c_str());
-            throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
-        }
+        if (function == nullptr)
+            throw std::runtime_error("DSPJIT : external_plugin_node : process symbol not found in module");
+
+        auto func_type = function->getFunctionType();
+        const auto input_count = get_input_count();
+        const auto output_count = get_output_count();
 
         //  Allocate outputs
         std::vector<llvm::Value*> outputs_ptr{output_count};
-
-        for (auto i = 0u; i < output_count; ++i)
-            outputs_ptr[i] = builder.CreateAlloca(builder.getFloatTy());
+        std::generate(
+            outputs_ptr.begin(), outputs_ptr.end(),
+            [&builder]() { return builder.CreateAlloca(builder.getFloatTy()); });
 
         //  Call process func
         std::vector<llvm::Value*> arg_values{};
 
-        // Add state argument if any
-        if (mutable_state_ptr != nullptr) {
-            const auto state_arg_type =
-                function->getFunctionType()->getFunctionParamType(0);
-            const auto state_arg =
-                compiler.builder().CreatePointerCast(mutable_state_ptr, state_arg_type);
-            arg_values.push_back(state_arg);
-        }
+        // Add static memory if needed
+        if (use_static_memory)
+            arg_values.push_back(_convert_ptr_arg(builder, function, arg_values.size(), static_mem));
+
+        // Add state pointer if needed
+        if (mutable_state_size > 0u)
+            arg_values.push_back(_convert_ptr_arg(builder, function, arg_values.size(), mutable_state_ptr));
 
         //  Add I/O arguments
-        for (auto i = 0u; i < input_count; ++i)
-            arg_values.push_back(inputs[i]);
-        for (auto i = 0u; i < output_count; ++i)
-            arg_values.push_back(outputs_ptr[i]);
+        for (auto i = 0u; i < input_count; ++i)  arg_values.push_back(inputs[i]);
+        for (auto i = 0u; i < output_count; ++i) arg_values.push_back(outputs_ptr[i]);
 
         //  Create call instruction
         builder.CreateCall(function, arg_values);
 
-        //  Get and return Output values
+        //  Load and return output values
         std::vector<llvm::Value*> output_values{output_count};
         for (auto i = 0u; i < output_count; ++i)
             output_values[i] = builder.CreateLoad(outputs_ptr[i]);
@@ -111,127 +107,88 @@ namespace DSPJIT {
 
     void external_plugin_node::initialize_mutable_state(
             llvm::IRBuilder<>& builder,
-        llvm::Value *mutable_state, llvm::Value*) const
+        llvm::Value *mutable_state, llvm::Value *static_mem) const
     {
-        if (!_initialize_symbol.has_value() || mutable_state == nullptr)
+        if (mutable_state_size == 0)
             return;
 
         const auto initialize_symbol = _initialize_symbol.value();
         auto module = builder.GetInsertBlock()->getModule();
         auto function = module->getFunction(initialize_symbol);
 
-        if (function == nullptr) {
-            LOG_ERROR("[external_plugin_node] Can't find symbol '%s', graph_execution_context was not setup\n", initialize_symbol.c_str());
-            throw std::runtime_error("DSPJIT : external_plugin_node : symbol not found");
-        }
+        if (function == nullptr)
+            throw std::runtime_error("DSPJIT : external_plugin_node : initialization function symbol not found");
 
-        //  Call the initialize function on the given state
-        const auto state_arg_type = function->getFunctionType()->getFunctionParamType(0);
-        const auto state_arg = builder.CreatePointerCast(mutable_state, state_arg_type);
-        builder.CreateCall(function, {state_arg});
+        //  Create the mutable state argument
+        std::vector<llvm::Value*> arg_values = {_convert_ptr_arg(builder, function, 0, mutable_state)};
+
+        // Create the static mem chunk argument if used
+        if (use_static_memory)
+            arg_values.push_back(_convert_ptr_arg(builder, function, 1u, static_mem));
+
+        builder.CreateCall(function, arg_values);
+    }
+
+    llvm::Value *external_plugin_node::_convert_ptr_arg(llvm::IRBuilder<>& builder, const llvm::Function *func, int arg_index, llvm::Value *ptr) const
+    {
+        const auto arg_type = func->getFunctionType()->getFunctionParamType(arg_index);
+        return builder.CreatePointerCast(ptr, arg_type);
     }
 
     /*
      *  External Plugin implementation
      */
-
-    external_plugin::external_plugin(
-        llvm::LLVMContext &llvm_context,
-        const std::vector<std::filesystem::path>& code_object_paths)
+    external_plugin::external_plugin(std::unique_ptr<llvm::Module>&& module)
+    :   _module{std::move(module)}
     {
-        /*
-         *  external plugins modules function symbols which are not declaration (from external libs)
-         *  are prefixed in order to avoid name collisions
-         */
         const auto symbol_prefix = "plugin__" + ptr_2_string(this) + "__";
-        bool process_func_found = false;
-        std::vector<std::unique_ptr<llvm::Module>> modules;
 
-        for (const auto& obj_path : code_object_paths) {
-            //  Load the module object from file
-            const auto obj_path_string = obj_path.string();
-            llvm::SMDiagnostic error;
+        process_info proc_info{};
+        std::optional<initialization_info> init_info{};
+        bool found_process_function = false;
 
-            LOG_DEBUG("[external_plugin] Loading module %s\n", obj_path_string.c_str());
-            auto module = llvm::parseIRFile(obj_path_string, error, llvm_context);
-            if (!module) {
-                LOG_ERROR("[external_plugin] Cannot load object %s\n", obj_path_string.c_str());
-                throw std::runtime_error("DSPJIT : Failed to load object");
+        // Apply prefix and search for API functions
+        for (auto& function : *_module) {
+            // Ignore declarations
+            if (function.isDeclaration())
+                continue;
+
+            // External plugins modules functions symbols which are not declarations (from external libs)
+            // are prefixed in order to avoid name collisions
+            const auto new_name = symbol_prefix + function.getName();
+
+            if (function.getName().equals(process_func_symbol)) {
+                proc_info = _read_process_func(function);
+                found_process_function = true;
+                _mangled_process_func_symbol = new_name.str();
+                LOG_DEBUG("[DSPJIT][external plugin] Found process function : input_count : %u, output count : %u, mutable_state_size : %llu, use_static_mem : %s\n",
+                    proc_info.input_count, proc_info.output_count, proc_info.mutable_state_size, proc_info.use_static_memory ? "true" : "false");
+            }
+            else if (function.getName().equals(initialize_func_symbol)) {
+                _mangled_initialize_func_symbol = new_name.str();
+                init_info = _read_initialize_func(function);
             }
 
-            /*
-             * Rename all functions defined in the module in order to avoid symbol colision
-             * Find process and initialize function in the module
-             */
-            for(auto& function : *module) {
-                //  Ingore declaration (there are typically libs functions)
-                if (function.isDeclaration())
-                    continue;
+            // Add prefix to function name
+            function.setName(new_name);
 
-                const auto new_name = symbol_prefix + function.getName();
-
-                if (function.getName().equals(process_func_symbol)) {
-                    if (process_func_found) {
-                        LOG_WARNING("[external_plugin] Warning : duplicate process symbol %s\n", process_func_symbol);
-                        break;
-                    }
-
-                    process_func_found = true;
-                    _mangled_process_func_symbol = new_name.str();
-
-                    //  Check that process function match needed interface
-                    if (_read_process_func_type(*module, function.getFunctionType())) {
-                        LOG_DEBUG("[external_plugin] Found process symbol : %u input(s), %u output(s), state size = %llu\n",
-                            _input_count, _output_count, _mutable_state_size);
-                    }
-                    else {
-                        LOG_ERROR("[external_plugin] process function does not match the required interface\n");
-                        throw std::runtime_error("DSPJIT::external plugin bad process func interface");
-                    }
-                }
-                else if (function.getName().equals(initialize_func_symbol)) {
-                    _mangled_initialize_func_symbol = new_name.str();
-
-                    //  Check that initialize function match needed interface
-                    if (_check_initialize_func_type(*module, function.getFunctionType())) {
-                        LOG_DEBUG("[external_plugin] Found initialize symbol\n");
-                    }
-                    else {
-                        LOG_ERROR("[external_plugin] process function does not match the required interface\n");
-                        throw std::runtime_error("DSPJIT::external plugin bad process func interface");
-                    }
-                }
-
-                //  Rename the function in order to isolate this plugin's functions in a namespace
-                function.setName(new_name);
-
-                //  Remove all function attributes as they can prevent optimization such as inlining
-                function.setAttributes(
-                    llvm::AttributeList::get(llvm_context, llvm::ArrayRef<llvm::AttributeList>{}));
-            }
-
-            modules.emplace_back(std::move(module));
+            // Remove all function attributes as they tend to prevent inlining
+            function.setAttributes(llvm::AttributeList{});
         }
 
-        if (!process_func_found) {
-            LOG_ERROR("[external_plugin] Symbol '%s' not found in plugin\n", process_func_symbol);
-            throw std::runtime_error("DSPJIT : external_plugin : symbol not found");
+        // Check consistency between init and process functions
+        if (!found_process_function) {
+            throw std::invalid_argument("external plugin : process function was not found int the external module");
         }
-        else if (!_mangled_initialize_func_symbol.has_value() && _mutable_state_size > 0u) {
-            LOG_WARNING("[external_plugin] Plugin does not provide an initialize function whereas its state have a non zero size (%u bytes)\n",
-                _mutable_state_size);
+        else if (_check_consistency(proc_info, init_info)) {
+            _proc_info = proc_info;
         }
-
-        //  link all modules together
-        const auto module_count = modules.size();
-
-        for (auto i = 1u; i < module_count; ++i)
-            llvm::Linker::linkModules(*(modules[0]), std::move(modules[i]));
-
-        _module = std::move(modules[0]);
+        else {
+            throw std::invalid_argument("external plugin : initialize and process function are not consistent");
+        }
     }
 
-    std::unique_ptr<llvm::Module> external_plugin::module()
+    std::unique_ptr<llvm::Module> external_plugin::create_module()
     {
         return llvm::CloneModule(*_module);
     }
@@ -239,86 +196,134 @@ namespace DSPJIT {
     std::unique_ptr<compile_node_class> external_plugin::create_node() const
     {
         return std::make_unique<external_plugin_node>(
-            _input_count,
-            _output_count,
+            _proc_info,
             _mangled_process_func_symbol,
-            _mangled_initialize_func_symbol,
-            _mutable_state_size);
+            _mangled_initialize_func_symbol);
     }
 
-    bool external_plugin::_read_process_func_type(const llvm::Module& module, const llvm::FunctionType *func_type)
+    external_plugin::process_info external_plugin::_read_process_func(const llvm::Function& function) const
     {
-        const auto param_count = func_type->getFunctionNumParams();
+        const auto argument_count = function.arg_size();
 
-        if (param_count <= 1)
-            return false;
+        if (argument_count <= 1)
+            throw std::invalid_argument("external plugin processs function does not have enough arguments");
 
-        //  Todo check first arg type
-        auto index = 0u;
-        const auto state_type = _read_state_type(func_type->getFunctionParamType(index));
+        std::size_t mutable_state_size = 0u;
+        bool use_static_mem = false;
+        auto arg_index = 0u;
 
-        if (state_type) {
-            const auto& data_layout = module.getDataLayout();
-            _mutable_state_size = data_layout.getTypeAllocSize(state_type).getFixedSize();
-            index++;
+        // Try read a static mem pointer
+        if (_is_static_mem(function.getArg(arg_index))) {
+            use_static_mem = true;
+            arg_index++;
         }
 
-        //  [state *,] float ...inputs, float *...outputs
-        _input_count = 0u;
-        _output_count = 0u;
+        // Try read a mutable state pointer
+        if (_is_mutable_state(function.getArg(arg_index), mutable_state_size)) {
+            arg_index++;
+        }
 
-        auto is_float_ptr = [] (const llvm::Type *t) {
-            const auto ptr_type = llvm::dyn_cast<llvm::PointerType>(t);
-            return ptr_type && ptr_type->getElementType()->isFloatTy();
-        };
+        // Read and check Input/Output parameters
+        auto input_count = 0u;
+        auto output_count = 0u;
 
-        //  Read inputs types : float...
-        for (; index < param_count; ++index) {
-            const auto param_type = func_type->getFunctionParamType(index);
-
-            if (param_type->isFloatTy()) {
-                _input_count++;
-            }
-            else if (is_float_ptr(param_type)) {
+        for (; arg_index < argument_count; ++arg_index) {
+            if (_is_input(function.getArg(arg_index)))
+                input_count++;
+            else
                 break;
-            }
-            else {
-                return false;
-            }
+
+        }
+        for (; arg_index < argument_count; ++arg_index) {
+            if (_is_output(function.getArg(arg_index)))
+                output_count++;
+            else
+                break;
         }
 
-        //  Read outputs types : float*
-        for (; index < param_count; ++index) {
-            const auto param_type = func_type->getFunctionParamType(index);
+        if (arg_index != argument_count)
+            throw std::invalid_argument("external plugin : process function does not have a compatible signature");
 
-            if(!is_float_ptr(param_type)) {
-                return false;
+        return {
+            .input_count = input_count,
+            .output_count = output_count,
+            .mutable_state_size = mutable_state_size,
+            .use_static_memory = use_static_mem
+        };
+    }
+
+    external_plugin::initialization_info external_plugin::_read_initialize_func(const llvm::Function& function) const
+    {
+        const auto argument_count = function.arg_size();
+
+        if (argument_count == 1u || argument_count == 2u) {
+            std::size_t mutable_state_size = 0u;
+
+            if (!_is_mutable_state(function.getArg(0u), mutable_state_size) ||
+                (argument_count == 2u && !_is_static_mem(function.getArg(1u))))
+            {
+                throw std::invalid_argument("external plugin : invalid initialize function signature");
             }
 
-            _output_count++;
+            return {
+                .mutable_state_size = mutable_state_size,
+                .use_static_memory = (argument_count == 2u)
+            };
         }
-
-        return true;
+        else {
+            throw std::invalid_argument("external plugin : bad parameter count for initialize function");
+        }
     }
 
-    bool external_plugin::_check_initialize_func_type(const llvm::Module&, const llvm::FunctionType* func_type)
+    bool external_plugin::_is_mutable_state(const llvm::Argument *arg, std::size_t& state_size) const
     {
-        //  Check that the state type is relevant (todo check type coherance)
-        return (func_type->getFunctionNumParams() == 1u) &&
-            (_read_state_type(func_type->getFunctionParamType(0)) != nullptr);
-    }
+        const auto ptr_type = llvm::dyn_cast<llvm::PointerType>(arg->getType());
 
-    llvm::Type *external_plugin::_read_state_type(const llvm::Type *param_type)
-    {
-        if (param_type->isPointerTy()) {
-            const auto ptr_type = llvm::dyn_cast<llvm::PointerType>(param_type);
+        if (ptr_type != nullptr) {
             const auto state_type = ptr_type->getElementType();
 
-            if (state_type->isSized())
-                return state_type;
+            // Mutable state can not be a float
+            if (state_type->isSized() && !state_type->isFloatTy()) {
+                const auto& data_layout = _module->getDataLayout();
+                state_size = data_layout.getTypeAllocSize(state_type).getFixedSize();
+                return true;
+            }
         }
 
-        return nullptr;
+        return false;
     }
 
+    bool external_plugin::_is_static_mem(const llvm::Argument *arg) const
+    {
+        // static mem is a const ptr
+        return arg->getType()->isPointerTy() &&
+            arg->hasAttribute(llvm::Attribute::AttrKind::ReadOnly);
+    }
+
+    bool external_plugin::_is_input(const llvm::Argument *arg) const
+    {
+        return arg->getType()->isFloatTy();
+    }
+
+    bool external_plugin::_is_output(const llvm::Argument *arg) const
+    {
+        const auto ptr_type = llvm::dyn_cast<llvm::PointerType>(arg->getType());
+        return ptr_type && ptr_type->getElementType()->isFloatTy();
+    }
+
+    bool external_plugin::_check_consistency(
+        const process_info& proc_info,
+        const std::optional<initialization_info>& init_info) const
+    {
+        // if an initialization function was provided
+        if (init_info.has_value()) {
+            const auto& init = init_info.value();
+            return (proc_info.use_static_memory == init.use_static_memory &&
+                    proc_info.mutable_state_size == init.mutable_state_size &&
+                    proc_info.mutable_state_size != 0u);
+        }
+        else {
+            return (proc_info.mutable_state_size == 0u);
+        }
+    }
 }

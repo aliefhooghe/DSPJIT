@@ -119,12 +119,14 @@ namespace DSPJIT {
         if (function == nullptr)
             throw std::runtime_error("DSPJIT : external_plugin_node : initialization function symbol not found");
 
-        //  Create the mutable state argument
-        std::vector<llvm::Value*> arg_values = {_convert_ptr_arg(builder, function, 0, mutable_state)};
+        std::vector<llvm::Value*> arg_values{};
 
-        // Create the static mem chunk argument if used
+        //  Create the static memory chunk argument if needed
         if (use_static_memory)
-            arg_values.push_back(_convert_ptr_arg(builder, function, 1u, static_mem));
+            arg_values.push_back(_convert_ptr_arg(builder, function, 0, static_mem));
+
+        //  Create the mutable state argument
+        arg_values.push_back(_convert_ptr_arg(builder, function, arg_values.size(), mutable_state));
 
         builder.CreateCall(function, arg_values);
     }
@@ -157,14 +159,14 @@ namespace DSPJIT {
             // are prefixed in order to avoid name collisions
             const auto new_name = symbol_prefix + function.getName();
 
-            if (function.getName().equals(process_func_symbol)) {
+            if (!found_process_function && function.getName().equals(process_func_symbol)) {
                 proc_info = _read_process_func(function);
                 found_process_function = true;
                 _mangled_process_func_symbol = new_name.str();
                 LOG_DEBUG("[DSPJIT][external plugin] Found process function : input_count : %u, output count : %u, mutable_state_size : %llu, use_static_mem : %s\n",
                     proc_info.input_count, proc_info.output_count, proc_info.mutable_state_size, proc_info.use_static_memory ? "true" : "false");
             }
-            else if (function.getName().equals(initialize_func_symbol)) {
+            else if (!_mangled_initialize_func_symbol && function.getName().equals(initialize_func_symbol)) {
                 _mangled_initialize_func_symbol = new_name.str();
                 init_info = _read_initialize_func(function);
             }
@@ -203,10 +205,10 @@ namespace DSPJIT {
 
     external_plugin::process_info external_plugin::_read_process_func(const llvm::Function& function) const
     {
-        const auto argument_count = function.arg_size();
+        const auto argument_count = function.getFunctionType()->getFunctionNumParams();
 
         if (argument_count <= 1)
-            throw std::invalid_argument("external plugin processs function does not have enough arguments");
+            throw std::invalid_argument("external plugin process function does not have enough arguments");
 
         std::size_t mutable_state_size = 0u;
         bool use_static_mem = false;
@@ -254,24 +256,26 @@ namespace DSPJIT {
 
     external_plugin::initialization_info external_plugin::_read_initialize_func(const llvm::Function& function) const
     {
-        const auto argument_count = function.arg_size();
+        std::size_t mutable_state_size = 0u;
+        const auto argument_count = function.getFunctionType()->getFunctionNumParams();
 
-        if (argument_count == 1u || argument_count == 2u) {
-            std::size_t mutable_state_size = 0u;
-
-            if (!_is_mutable_state(function.getArg(0u), mutable_state_size) ||
-                (argument_count == 2u && !_is_static_mem(function.getArg(1u))))
-            {
-                throw std::invalid_argument("external plugin : invalid initialize function signature");
-            }
-
+        if (argument_count == 1u && _is_mutable_state(function.getArg(0u), mutable_state_size))
+        {
             return {
                 .mutable_state_size = mutable_state_size,
-                .use_static_memory = (argument_count == 2u)
+                .use_static_memory = false
+            };
+        }
+        else if (argument_count == 2u && _is_static_mem(function.getArg(0u)) &&
+            _is_mutable_state(function.getArg(1u), mutable_state_size))
+        {
+            return {
+                .mutable_state_size = mutable_state_size,
+                .use_static_memory = true
             };
         }
         else {
-            throw std::invalid_argument("external plugin : bad parameter count for initialize function");
+            throw std::invalid_argument("external plugin : invalid initialize function signature");
         }
     }
 
@@ -297,7 +301,8 @@ namespace DSPJIT {
     {
         // static mem is a const ptr
         return arg->getType()->isPointerTy() &&
-            arg->hasAttribute(llvm::Attribute::AttrKind::ReadOnly);
+            (arg->hasAttribute(llvm::Attribute::AttrKind::ReadOnly) ||
+                arg->hasAttribute(llvm::Attribute::AttrKind::ReadNone));
     }
 
     bool external_plugin::_is_input(const llvm::Argument *arg) const

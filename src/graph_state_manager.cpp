@@ -5,11 +5,11 @@
 namespace DSPJIT {
 
     graph_state_manager::mutable_node_state::mutable_node_state(
-        llvm::LLVMContext& llvm_context,
+        graph_state_manager& manager,
         std::size_t state_size,
         std::size_t instance_count,
         std::size_t output_count)
-    :   _llvm_context{llvm_context},
+    :   _manager{manager},
         _cycle_state(instance_count * output_count, 0.f),
         _data(state_size * instance_count, 0u),
         _node_output_count{output_count},
@@ -24,15 +24,17 @@ namespace DSPJIT {
         llvm::Value *instance_num_value,
         std::size_t output_id)
     {
+        const auto pointer =
+            _cycle_state.data() + output_id * _instance_count;
+        _manager._declare_used_cycle_state(this, output_id);
         return
             builder.CreateGEP(
                 builder.CreateIntToPtr(
                     llvm::ConstantInt::get(
                         builder.getIntNTy(sizeof(float*) * 8),
-                        reinterpret_cast<intptr_t>(_cycle_state.data() + output_id * _instance_count)),
-                    llvm::Type::getFloatPtrTy(_llvm_context)),
-                instance_num_value
-            );
+                        reinterpret_cast<intptr_t>(pointer)),
+                    llvm::Type::getFloatPtrTy(_manager.get_llvm_context())),
+                instance_num_value);
     }
 
     llvm::Value *graph_state_manager::mutable_node_state::get_mutable_state_ptr(
@@ -119,20 +121,59 @@ namespace DSPJIT {
 
     void graph_state_manager::begin_sequence(const compile_sequence_t seq)
     {
+        _sequence_new_nodes.clear();
         _sequence_used_nodes.clear();
+        _sequence_used_cycle_states.clear();
         _current_sequence_number = seq;
     }
 
-    void graph_state_manager::declare_used_node(const compile_node_class *node)
+    graph_state_manager::initialize_functions graph_state_manager::finish_sequence(llvm::ExecutionEngine& engine, llvm::Module& module)
     {
-        _sequence_used_nodes.insert(node);
+        node_list used_nodes{};
+
+        //  map must not be empty since (a unused sequence is supposed to be started)
+        //  get an iterator on previous sequence
+        auto previous_delete_sequence_it = _delete_sequence.rbegin();
+
+        for (auto state_it = _state.begin(); state_it != _state.end();) {
+            //  avoid iterator invalidation
+            const auto cur_it = state_it++;
+            //  Collect unused nodes : this node is not used anymore
+            if (_sequence_used_nodes.count(cur_it->first) == 0)
+            {
+                //  Move the state in the previous delete_sequence in order to make it deleted when the current sequence will be used
+                previous_delete_sequence_it->second.add_deleted_node(std::move(cur_it->second));
+
+                //  Remove the coresponding entry in state store
+                _state.erase(cur_it);
+            }
+            else
+            {
+                used_nodes.push_back(cur_it->first);
+            }
+        }
+
+        //  Create a delete sequence for the current compilation sequence
+        _delete_sequence.emplace(_current_sequence_number, delete_sequence{&engine, &module});
+
+        LOG_DEBUG("[graph_state_manager][finish_sequence] Compile init func for %lu nodes (%lu news)\n",
+            used_nodes.size(), _sequence_new_nodes.size());
+
+        return {
+            _compile_initialize_function("graph__initialize", used_nodes, &_sequence_used_cycle_states, module),
+            _compile_initialize_function("graph__initialize_new_nodes", _sequence_new_nodes, nullptr, module)
+        };
     }
 
-    llvm::Function *graph_state_manager::finish_sequence(llvm::ExecutionEngine& engine, llvm::Module& module)
+    llvm::Function* graph_state_manager::_compile_initialize_function(
+        const std::string& symbol,
+        const node_list& nodes,
+        cycle_state_set* cycles_states,
+        llvm::Module& module)
     {
         //  Create the graph state initialize function
-        auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), {llvm::Type::getInt64Ty(_llvm_context)}, false);
-        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "graph__initialize_function", &module);
+        auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), { llvm::Type::getInt64Ty(_llvm_context) }, false);
+        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, symbol, &module);
         auto instance_num_value = function->arg_begin();
         auto basic_block = llvm::BasicBlock::Create(_llvm_context, "", function);
 
@@ -140,59 +181,59 @@ namespace DSPJIT {
         llvm::IRBuilder builder(_llvm_context);
         builder.SetInsertPoint(basic_block);
 
-        //  map must not be empty since (a unused sequence is supposed to be started)
-        //  get an iterator on previous sequence
-        auto previous_delete_sequence_it = _delete_sequence.rbegin();
+        for (const auto node : nodes) {
+            if (node->mutable_state_size != 0u) {
+                const auto state_it = _state.find(node);
 
-        //  Collect unused node states :
-        for (auto state_it = _mutable_state.begin(); state_it != _mutable_state.end();) {
-            //  avoid iterator invalidation
-            const auto cur_it = state_it++;
+                if (state_it != _state.end()) {
+                    // Try to retrieve static memory chunk if the node ise static memory
+                    llvm::Value *static_memory = nullptr;
+                    if (node->use_static_memory) {
+                        const auto static_mem_ref = get_static_memory_ref(builder, *node);
 
-            //  if this node is not used anymore
-            if (_sequence_used_nodes.count(cur_it->first) == 0)
-            {
-                //  Move the state in the previous delete_sequence in order to make it deleted when the current sequence will be used
-                previous_delete_sequence_it->second.add_deleted_node(std::move(cur_it->second));
+                        if (static_mem_ref != nullptr)
+                            static_memory = static_mem_ref;
+                        else
+                            continue;   // Ignore this node if there is not available static memory chunk for the node
+                    }
 
-                //  Remove the coresponding entry in state store
-                _mutable_state.erase(cur_it);
-            }
-            else
-            {
-                //  The node is used, its state must be initialized at graph initialization
-                const auto& node = (*cur_it->first);
-
-                //  Ignore stateless nodes
-                if (node.mutable_state_size == 0u)
-                    continue;
-
-                // Try to retrieve static memory chunk if the node ise static memory
-                llvm::Value *static_memory = nullptr;
-                if (node.use_static_memory) {
-                    const auto static_mem_ref = get_static_memory_ref(builder, node);
-
-                    if (static_mem_ref != nullptr)
-                        static_memory = static_mem_ref;
-                    else
-                        continue;   // Ignore this node if there is not available static memory chink for the node
+                    //  emit the node mutable state initialization code
+                    node->initialize_mutable_state(
+                        builder,
+                        state_it->second.get_mutable_state_ptr(builder, instance_num_value),
+                        static_memory);
                 }
-
-                //  emit the node mutable state initialization code
-                node.initialize_mutable_state(
-                    builder,
-                    cur_it->second.get_mutable_state_ptr(builder, instance_num_value),
-                    static_memory);
+                else {
+                    LOG_ERROR("[graph_state_manager][_compile_initialize_function] Could not find state for node %p\n", node);
+                }
             }
         }
 
-        //  Create a delete sequence for the current compilation sequence
-        _delete_sequence.emplace(_current_sequence_number, delete_sequence{&engine, &module});
+        // Initialize cycles states if any
+        if (cycles_states != nullptr) {
+            const auto zero =
+                llvm::ConstantFP::get(
+                    _llvm_context,
+                    llvm::APFloat::getZero(llvm::APFloat::IEEEsingle()));
+            LOG_DEBUG("[graph_state_manager][_compile_initialize_function] Initialize %u cycles states\n",
+                cycles_states->size());
+
+            for (const auto& cycle_state : *cycles_states) {
+                const auto cycle_state_ptr =
+                    cycle_state.first->get_cycle_state_ptr(builder, instance_num_value, cycle_state.second);
+                builder.CreateStore(zero, cycle_state_ptr);
+            }
+        }
 
         //  Finish and return the initialize function
         builder.CreateRetVoid();
 
         return function;
+    }
+
+    void graph_state_manager::_declare_used_cycle_state(mutable_node_state* state, unsigned int output_id)
+    {
+        _sequence_used_cycle_states.emplace(state, output_id);
     }
 
     void graph_state_manager::using_sequence(const compile_sequence_t seq)
@@ -205,13 +246,15 @@ namespace DSPJIT {
 
     graph_state_manager::mutable_node_state& graph_state_manager::get_or_create(const compile_node_class& node)
     {
-        auto state_it = _mutable_state.find(&node);
+        auto state_it = _state.find(&node);
 
-        if (state_it == _mutable_state.end()) {
+        if (state_it == _state.end()) {
             //  Create the state if needed
-            state_it = _mutable_state.emplace(
+            state_it = _state.emplace(
                 &node,
-                mutable_node_state{_llvm_context, node.mutable_state_size, _instance_count, node.get_output_count()}).first;
+                mutable_node_state{*this, node.mutable_state_size, _instance_count, node.get_output_count()}).first;
+            //  Remember that this state is a new state
+            _sequence_new_nodes.push_back(&node);
         }
         else {
             if (node.get_output_count() != state_it->second._node_output_count) {
@@ -219,6 +262,8 @@ namespace DSPJIT {
             }
         }
 
+        // Remember that this state is used in the current sequence
+        _sequence_used_nodes.insert(&node);
         return state_it->second;
     }
 

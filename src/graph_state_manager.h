@@ -35,12 +35,13 @@ namespace DSPJIT {
          */
         class mutable_node_state {
             friend class graph_state_manager;
-        public:
+
             explicit mutable_node_state(
-                    llvm::LLVMContext& llvm_context,
+                    graph_state_manager& manager,
                     std::size_t state_size,
                     std::size_t instance_count,
                     std::size_t output_count);
+        public:
             mutable_node_state(const mutable_node_state&) = delete;
             mutable_node_state(mutable_node_state&&) = default;
 
@@ -62,7 +63,7 @@ namespace DSPJIT {
         private:
             void _update_output_count(std::size_t output_count);
 
-            llvm::LLVMContext& _llvm_context;
+            graph_state_manager& _manager;
             std::vector<float> _cycle_state;
             std::vector<uint8_t> _data{};
             std::size_t _node_output_count;
@@ -70,13 +71,16 @@ namespace DSPJIT {
             std::size_t _size;
         };
 
-        class mutable_node_state;
+        friend class mutable_node_state;
 
-        /****************************************
-         *
-         *      Graph state manager API
-         *
-         ****************************************/
+        /**
+         * \brief Functions used to initialize nodes states
+         */
+        struct initialize_functions
+        {
+            llvm::Function* initialize{nullptr};
+            llvm::Function* initialize_new_nodes{nullptr};
+        };
 
         /**
          * \brief
@@ -98,21 +102,14 @@ namespace DSPJIT {
         void begin_sequence(const compile_sequence_t seq);
 
         /**
-         * \brief notify the state manager that a node was used during the current sequence
-         * \note can only be called when a compilation sequence has been started
-         * \param node the node whose state is used
-         */
-        void declare_used_node(const compile_node_class *node);
-
-        /**
          * \brief notify the state manager that a new compilation sequence was finished an compile
          * the graph state initialization function
          * \note can only be called when a compilation sequence has been started
          * \param engine reference to the execution engine on which the native code have been emitted
          * \param module a reference to the module which is builded
-         * \return a pointer to the graph state initialize function (compiled in module)
+         * \return The graph state initialize functions (compiled in module)
          */
-        llvm::Function *finish_sequence(
+        initialize_functions finish_sequence(
             llvm::ExecutionEngine& engine,
             llvm::Module& module);
 
@@ -126,6 +123,8 @@ namespace DSPJIT {
         /**
          * \brief return a reference to the stored node's state. State is created if it doesn't exist
          * \param node the node whose state is needed
+         * \node notify the state manager that a node was used during the current sequence.
+         * can only be called when a compilation sequence has been started.
          */
         mutable_node_state& get_or_create(const compile_node_class& node);
 
@@ -146,9 +145,10 @@ namespace DSPJIT {
         llvm::Value *get_static_memory_ref(llvm::IRBuilder<>& builder, const compile_node_class& node);
 
         /**
-         *
+         * \brief return the llvm used by the state manager
          */
         llvm::LLVMContext& get_llvm_context() noexcept { return _llvm_context; }
+
     private:
 
         /**
@@ -172,16 +172,29 @@ namespace DSPJIT {
             std::vector<std::vector<uint8_t>> _static_data_chunks{};    //< Static memory chunk to be removed when the sequence is over
         };
 
+        using node_list = std::vector<const compile_node_class*>;
+        using node_set = std::set<const compile_node_class*>;
+        using cycle_state_set = std::set<std::pair<mutable_node_state*, unsigned int>>;
         using state_map = std::map<const compile_node_class*, mutable_node_state>;
         using static_memory_map = std::map<const compile_node_class*, std::vector<uint8_t>>;
         using delete_sequence_map = std::map<compile_sequence_t, delete_sequence>;
 
         void _trash_static_memory_chunk(static_memory_map::iterator chunk_it);
 
+        llvm::Function* _compile_initialize_function(
+            const std::string& symbol,
+            const node_list& nodes,
+            cycle_state_set* cycles_states,   // can be null
+            llvm::Module& module);
+
+        void _declare_used_cycle_state(mutable_node_state* state, unsigned int output_id);
+
         llvm::LLVMContext& _llvm_context;
-        state_map _mutable_state{};
+        state_map _state{};
         static_memory_map _static_memory{};
-        std::set<const compile_node_class*> _sequence_used_nodes{};
+        node_list _sequence_new_nodes{};
+        node_set _sequence_used_nodes{};
+        cycle_state_set _sequence_used_cycle_states{};
         delete_sequence_map _delete_sequence{};
         const std::size_t _instance_count;
         compile_sequence_t _current_sequence_number;

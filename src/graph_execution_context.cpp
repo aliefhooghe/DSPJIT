@@ -23,6 +23,7 @@ namespace DSPJIT {
         const opt_level level,
         const llvm::TargetOptions& options)
     :   _llvm_context{llvm_context},
+        _instance_count{instance_count},
         _current_sequence{0u},
         _state_manager{llvm_context, instance_count, _current_sequence},
         _ack_msg_queue{256},
@@ -95,18 +96,22 @@ namespace DSPJIT {
                 output_nodes,
                 *module);
 
-        auto initialize_function =
+        auto initialize_functions =
             _state_manager.finish_sequence(*_execution_engine, *module);
 
         if (_ir_dump) {
             LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
             ir_helper::print_function(*process_function);
-            ir_helper::print_function(*initialize_function);
+            ir_helper::print_function(*initialize_functions.initialize);
+            ir_helper::print_function(*initialize_functions.initialize_new_nodes);
         }
 
         //  Check generated IR code
         llvm::raw_os_ostream stream{std::cout};
-        if (llvm::verifyFunction(*process_function, &stream) || llvm::verifyFunction(*initialize_function, &stream)) {
+        if (llvm::verifyFunction(*process_function, &stream) || 
+            llvm::verifyFunction(*initialize_functions.initialize, &stream) ||
+            llvm::verifyFunction(*initialize_functions.initialize_new_nodes, &stream))
+        {
             LOG_ERROR("\n[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation\n");
             //  Do not compile to native code because malformed code could lead to crash
             //  Stay at last process_func.
@@ -118,11 +123,12 @@ namespace DSPJIT {
         if (_ir_dump) {
             LOG_INFO("[graph_execution_context][compile thread] IR code after optimization\n");
             ir_helper::print_function(*process_function);
-            ir_helper::print_function(*initialize_function);
+            ir_helper::print_function(*initialize_functions.initialize);
+            ir_helper::print_function(*initialize_functions.initialize_new_nodes);
         }
 
         //  Compile LLVM IR to native code
-        _emit_native_code(std::move(module), process_function, initialize_function);
+        _emit_native_code(std::move(module), process_function, initialize_functions);
 
         auto end = std::chrono::steady_clock::now();
         LOG_INFO("[graph_execution_context][compile thread] graph compilation finished (%u ms)\n",
@@ -198,7 +204,7 @@ namespace DSPJIT {
             llvm::Type::getFloatPtrTy(_llvm_context)};
 
         auto func_type = llvm::FunctionType::get(llvm::Type::getVoidTy(_llvm_context), arg_types, false /* is_var_arg */);
-        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "graph__process_function", &graph_module);
+        auto function = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, "graph__process", &graph_module);
 
         //  Create function code block
         auto basic_block = llvm::BasicBlock::Create(_llvm_context, "", function);
@@ -280,20 +286,25 @@ namespace DSPJIT {
     void graph_execution_context::_emit_native_code(
         std::unique_ptr<llvm::Module>&& graph_module,
         llvm::Function *process_func,
-        llvm::Function *initialize_func)
+        intialize_functions initialize_funcs)
     {
         //  Compile module to native code
         _execution_engine->addModule(std::move(graph_module));
         _execution_engine->finalizeObject();
 
+        // Retrieve pointers to generated native code
         auto process_func_pointer =
             reinterpret_cast<native_process_func>(_execution_engine->getPointerToFunction(process_func));
         auto initialize_func_pointer =
-            reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_func));
+            reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_funcs.initialize));
+        auto initialize_new_node_func_pointer = 
+            reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_funcs.initialize_new_nodes));
 
-        /*
-         *      Notify process thread that a native function is ready
-         */
+        //  Initialize every instances for new nodes as there could be running instances now
+        for (auto i = 0u; i < _instance_count; i++)
+            initialize_new_node_func_pointer(i);
+
+        //      Notify process thread that new code is ready to be processed
         if (_compile_done_msg_queue.enqueue({_current_sequence, process_func_pointer, initialize_func_pointer})) {
             LOG_DEBUG("[graph_execution_context][compile thread] Send compile_done message to process thread (seq = %u)\n", _current_sequence);
         }

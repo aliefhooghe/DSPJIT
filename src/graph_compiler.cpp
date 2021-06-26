@@ -55,8 +55,6 @@ namespace DSPJIT {
             //  Compile node
             compile_node(*node, value_it->second);
 
-            _state_mgr.declare_used_node(node);
-
             return value_it->second[output_id];
         }
     }

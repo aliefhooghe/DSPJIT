@@ -134,7 +134,10 @@ namespace DSPJIT {
          *   Used by Compile Thread
          *********************************************/
 
+        using intialize_functions = graph_state_manager::initialize_functions;
+
         llvm::LLVMContext& _llvm_context;
+        const std::size_t _instance_count;                           ///< Number of state instances ready for execution
         std::unique_ptr<llvm::ExecutionEngine> _execution_engine;   ///< execution engine is used for just in time compilation
         std::unique_ptr<llvm::Module> _library{};                   ///< code available for execution from graph node
         compile_sequence_t _current_sequence;                       ///< current compilation sequence number
@@ -185,8 +188,8 @@ namespace DSPJIT {
          */
         void _emit_native_code(
             std::unique_ptr<llvm::Module>&& graph_module,
-            llvm::Function* process_func,
-            llvm::Function* initialize_func);
+            llvm::Function* process_funcs,
+            intialize_functions initialize_func);
 
         /**
          *  \brief Process an acknowledgment message

@@ -247,10 +247,10 @@ namespace DSPJIT {
             throw std::invalid_argument("external plugin : process function does not have a compatible signature");
 
         return {
-            .input_count = input_count,
-            .output_count = output_count,
-            .mutable_state_size = mutable_state_size,
-            .use_static_memory = use_static_mem
+            input_count,
+            output_count,
+            mutable_state_size,
+            use_static_mem
         };
     }
 
@@ -262,16 +262,16 @@ namespace DSPJIT {
         if (argument_count == 1u && _is_mutable_state(function.getArg(0u), mutable_state_size))
         {
             return {
-                .mutable_state_size = mutable_state_size,
-                .use_static_memory = false
+                mutable_state_size,
+                false
             };
         }
         else if (argument_count == 2u && _is_static_mem(function.getArg(0u)) &&
             _is_mutable_state(function.getArg(1u), mutable_state_size))
         {
             return {
-                .mutable_state_size = mutable_state_size,
-                .use_static_memory = true
+                mutable_state_size,
+                true
             };
         }
         else {

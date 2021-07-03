@@ -207,7 +207,7 @@ namespace DSPJIT {
     {
         const auto argument_count = function.getFunctionType()->getFunctionNumParams();
 
-        if (argument_count <= 1)
+        if (argument_count < 1)
             throw std::invalid_argument("external plugin process function does not have enough arguments");
 
         std::size_t mutable_state_size = 0u;

@@ -10,6 +10,7 @@
 #include "graph_state_manager.h"
 #include "graph_compiler.h"
 #include "lock_free_queue.h"
+#include "object_dumper.h"
 
 namespace DSPJIT {
 
@@ -17,7 +18,6 @@ namespace DSPJIT {
      * \brief graph_execution_context
      */
     class graph_execution_context {
-
 
         /* Native compiled function types */
         using native_process_func = void (*)(std::size_t instance_num, const float *inputs, float *outputs);
@@ -36,6 +36,8 @@ namespace DSPJIT {
             native_process_func process_func;
             native_initialize_func initialize_func;
         };
+
+        friend class object_dumper;
 
     public:
         using opt_level = llvm::CodeGenOpt::Level;
@@ -81,6 +83,12 @@ namespace DSPJIT {
         void enable_ir_dump(bool enable = true);
 
         /**
+         * \brief Get a pointer to the last generated native code object
+         * \note Should be used for debug purpose
+         */
+        const uint8_t *get_native_code(std::size_t& size);
+
+        /**
          * \brief Create if needed and set a global constant,
          * available for the compile nodes
          */
@@ -97,6 +105,11 @@ namespace DSPJIT {
          * \brief Free the static memory chunk registered for the given node
          */
         void free_static_memory_chunk(const compile_node_class& node);
+
+        /**
+         * \brief Return the number of instance this context can run
+         */
+        std::size_t get_instance_count() const noexcept { return _instance_count; }
 
         /*********************************************
          *   Process Thread API
@@ -142,7 +155,11 @@ namespace DSPJIT {
         std::unique_ptr<llvm::Module> _library{};                   ///< code available for execution from graph node
         compile_sequence_t _current_sequence;                       ///< current compilation sequence number
         graph_state_manager _state_manager;                         ///< manage the state of the graph across recompilations
-        bool _ir_dump{false};                                       ///< print IR on lons if enabled
+        // debug fields:
+        bool _ir_dump{false};                                       ///< print IR on logs if enabled
+        object_dumper _obj_dumper;
+        const uint8_t *_last_native_code_object_data{nullptr};
+        std::size_t _last_native_code_object_size{0u};
 
         /**
          * \brief Compile the process function

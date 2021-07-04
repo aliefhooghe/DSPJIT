@@ -1,22 +1,20 @@
-
-#include <fstream>
+#include "graph_execution_context.h"
 #include "object_dumper.h"
+#include "log.h"
 
 namespace DSPJIT {
 
-    object_dumper::object_dumper(const std::string& filename)
-    : _filename{filename}
+    object_dumper::object_dumper(graph_execution_context& context)
+    : _context{context}
     {
     }
 
     void object_dumper::notifyObjectLoaded(ObjectKey, const llvm::object::ObjectFile &obj, const llvm::RuntimeDyld::LoadedObjectInfo &)
     {
-        std::ofstream of(_filename);
-
-        if (of) {
-            auto buffer = obj.getMemoryBufferRef();
-            of.write(buffer.getBufferStart(), buffer.getBufferSize());
-        }
+        auto buffer = obj.getMemoryBufferRef();
+        LOG_DEBUG("[graph_execution_context] [obj dumper] Loaded native code object : size = %llu\n", buffer.getBufferSize());
+        _context._last_native_code_object_data = reinterpret_cast<const uint8_t*>(buffer.getBufferStart());
+        _context._last_native_code_object_size = buffer.getBufferSize();
     }
 
 }

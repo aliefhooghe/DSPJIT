@@ -26,6 +26,7 @@ namespace DSPJIT {
         _instance_count{instance_count},
         _current_sequence{0u},
         _state_manager{llvm_context, instance_count, _current_sequence},
+        _obj_dumper{*this},
         _ack_msg_queue{256},
         _compile_done_msg_queue{256}
     {
@@ -56,6 +57,8 @@ namespace DSPJIT {
             LOG_ERROR("[graph_execution_context] Failed to initialize execution engine : %s\n", error_string.c_str());
             throw std::runtime_error("Failed to initialize execution engine ");
         }
+
+        _execution_engine->RegisterJITEventListener(&_obj_dumper);
 
         // Create library module
         _library = std::make_unique<llvm::Module>("graph_execution_context.library", _llvm_context);
@@ -108,7 +111,7 @@ namespace DSPJIT {
 
         //  Check generated IR code
         llvm::raw_os_ostream stream{std::cout};
-        if (llvm::verifyFunction(*process_function, &stream) || 
+        if (llvm::verifyFunction(*process_function, &stream) ||
             llvm::verifyFunction(*initialize_functions.initialize, &stream) ||
             llvm::verifyFunction(*initialize_functions.initialize_new_nodes, &stream))
         {
@@ -138,6 +141,13 @@ namespace DSPJIT {
     void graph_execution_context::enable_ir_dump(bool enable)
     {
         _ir_dump = true;
+    }
+
+    const uint8_t *graph_execution_context::get_native_code(std::size_t& size)
+    {
+        if (_last_native_code_object_data != nullptr)
+            size = _last_native_code_object_size;
+        return _last_native_code_object_data;
     }
 
     void graph_execution_context::set_global_constant(const std::string& name, float value)
@@ -297,7 +307,7 @@ namespace DSPJIT {
             reinterpret_cast<native_process_func>(_execution_engine->getPointerToFunction(process_func));
         auto initialize_func_pointer =
             reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_funcs.initialize));
-        auto initialize_new_node_func_pointer = 
+        auto initialize_new_node_func_pointer =
             reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_funcs.initialize_new_nodes));
 
         //  Initialize every instances for new nodes as there could be running instances now

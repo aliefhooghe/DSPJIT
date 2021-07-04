@@ -57,6 +57,15 @@ namespace DSPJIT {
         return {compiler.builder().CreateFAdd(inputs[0], inputs[1])};
     }
 
+    // Sub
+    std::vector<llvm::Value*> substract_node::emit_outputs(
+        graph_compiler& compiler,
+        const std::vector<llvm::Value*>& inputs,
+        llvm::Value*, llvm::Value*) const
+    {
+        return {compiler.builder().CreateFSub(inputs[0], inputs[1])};
+    }
+
     // Mul
     std::vector<llvm::Value*> mul_node::emit_outputs(
         graph_compiler& compiler,

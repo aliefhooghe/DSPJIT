@@ -75,6 +75,19 @@ namespace DSPJIT {
                 llvm::Value*, llvm::Value*) const override;
     };
 
+    // Sub
+    class substract_node : public compile_node_class {
+    public:
+        substract_node() :
+            compile_node_class{ 2u, 1u }
+        {}
+
+        std::vector<llvm::Value*> emit_outputs(
+            graph_compiler& compiler,
+            const std::vector<llvm::Value*>& inputs,
+            llvm::Value*, llvm::Value*) const override;
+    };
+
     // Mull
 
     class mul_node : public compile_node_class {

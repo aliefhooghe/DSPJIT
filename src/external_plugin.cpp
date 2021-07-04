@@ -214,15 +214,19 @@ namespace DSPJIT {
         bool use_static_mem = false;
         auto arg_index = 0u;
 
-        // Try read a static mem pointer
-        if (_is_static_mem(function.getArg(arg_index))) {
-            use_static_mem = true;
-            arg_index++;
-        }
+        // Try read static mem pointer/mutable state pointer
+        if (_is_static_mem(function.getArg(0u))) {
 
-        // Try read a mutable state pointer
-        if (_is_mutable_state(function.getArg(arg_index), mutable_state_size)) {
-            arg_index++;
+            if (_is_mutable_state(function.getArg(1u), mutable_state_size)) {
+                use_static_mem = true;
+                arg_index = 2u;
+            }
+            else if (_is_mutable_state(function.getArg(0u), mutable_state_size)) {
+                arg_index = 1u;
+            }
+            else {
+                throw std::invalid_argument("external plugin : process function provide use a static memory chunk without a valid mutable state");
+            }
         }
 
         // Read and check Input/Output parameters
@@ -299,10 +303,15 @@ namespace DSPJIT {
 
     bool external_plugin::_is_static_mem(const llvm::Argument *arg) const
     {
-        // static mem is a const ptr
-        return arg->getType()->isPointerTy() &&
-            (arg->hasAttribute(llvm::Attribute::AttrKind::ReadOnly) ||
-                arg->hasAttribute(llvm::Attribute::AttrKind::ReadNone));
+        const auto ptr_type = llvm::dyn_cast<llvm::PointerType>(arg->getType());
+
+        if (ptr_type != nullptr) {
+            const auto state_type = ptr_type->getElementType();
+            return !state_type->isFloatTy();
+        }
+        else {
+            return false;
+        }
     }
 
     bool external_plugin::_is_input(const llvm::Argument *arg) const

@@ -76,10 +76,8 @@ namespace DSPJIT {
 					"" /* MCPU */,
 					llvm::SmallVector<std::string>{})));
 
-        if (!_execution_engine) {
-            LOG_ERROR("[graph_execution_context] Failed to initialize execution engine : %s\n", error_string.c_str());
-            throw std::runtime_error("Failed to initialize execution engine ");
-        }
+        if (!_execution_engine)
+            throw std::runtime_error("Failed to initialize execution engine :" + error_string);
 
         _execution_engine->RegisterJITEventListener(&_obj_dumper);
         _execution_engine->DisableLazyCompilation();
@@ -136,9 +134,7 @@ namespace DSPJIT {
 
         //  Check generated IR code
         llvm::raw_os_ostream stream{std::cout};
-        if (llvm::verifyFunction(*process_function, &stream) ||
-            llvm::verifyFunction(*initialize_functions.initialize, &stream) ||
-            llvm::verifyFunction(*initialize_functions.initialize_new_nodes, &stream))
+        if (llvm::verifyModule(*module, &stream))
         {
             LOG_ERROR("\n[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation\n");
             //  Do not compile to native code because malformed code could lead to crash

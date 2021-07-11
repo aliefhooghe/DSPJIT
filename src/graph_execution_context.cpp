@@ -2,6 +2,7 @@
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
+#include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
@@ -85,12 +86,13 @@ namespace DSPJIT {
         if (_ack_msg_queue.dequeue(msg))
             _process_ack_msg(msg);
 
-        //  Create module and link library into it
-        auto module = std::make_unique<llvm::Module>("graph_execution_context.dsp", _llvm_context);
-        llvm::Linker::linkModules(*module, llvm::CloneModule(*_library));
-
+        //  Start a new sequence
         _current_sequence++;
         _state_manager.begin_sequence(_current_sequence);
+
+        //  Create module and link library into it
+        auto module = std::make_unique<llvm::Module>("graph_execution_context.dsp." + _current_sequence, _llvm_context);
+        llvm::Linker::linkModules(*module, llvm::CloneModule(*_library));
 
         //  Compile process function
         auto process_function =
@@ -301,6 +303,12 @@ namespace DSPJIT {
         //  Compile module to native code
         _execution_engine->addModule(std::move(graph_module));
         _execution_engine->finalizeObject();
+
+        if (_execution_engine->hasError()) {
+            LOG_ERROR("[graph_execution_context][compile thread] Execution engine encountered an error while generation native code : %s\n",
+                _execution_engine->getErrorMessage());
+            _execution_engine->clearErrorMessage();
+        }
 
         // Retrieve pointers to generated native code
         auto process_func_pointer =

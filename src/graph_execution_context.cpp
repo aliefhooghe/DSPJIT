@@ -168,6 +168,8 @@ namespace DSPJIT {
     {
         if (_last_native_code_object_data != nullptr)
             size = _last_native_code_object_size;
+        else
+            size = 0u;
         return _last_native_code_object_data;
     }
 

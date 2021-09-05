@@ -18,6 +18,19 @@
 
 namespace DSPJIT {
 
+    static llvm::Triple _choose_native_target_triple()
+    {
+        return llvm::Triple(
+#if defined(__linux__) || defined(__APPLE__)
+        // Select the defaut on linux and OSW machine
+        ""
+#elif defined _WIN32
+        // Force elf on windows, as COFF relocation seems to cause trouble
+        "x86_64-pc-win32-elf"
+#endif
+        );
+    }
+
     graph_execution_context::graph_execution_context(
         llvm::LLVMContext& llvm_context,
         std::size_t instance_count,
@@ -42,17 +55,26 @@ namespace DSPJIT {
 
         //  Initialize executionEngine
         auto memory_mgr =
-            std::unique_ptr<llvm::RTDyldMemoryManager>(new llvm::SectionMemoryManager());
+			std::unique_ptr<llvm::RTDyldMemoryManager>(new llvm::SectionMemoryManager());
 
-        _execution_engine =
-            std::unique_ptr<llvm::ExecutionEngine>(
-                llvm::EngineBuilder{std::make_unique<llvm::Module>("dummy", _llvm_context)}
-                .setErrorStr(&error_string)
-                .setEngineKind(llvm::EngineKind::JIT)
-                .setTargetOptions(options)
-                .setOptLevel(level)
-                .setMCJITMemoryManager(std::move(memory_mgr))
-                .create());
+		llvm::EngineBuilder engine_builder
+        {
+            std::make_unique<llvm::Module>("base", _llvm_context)
+        };
+
+		_execution_engine =
+			std::unique_ptr<llvm::ExecutionEngine>(
+				engine_builder
+				.setErrorStr(&error_string)
+				.setEngineKind(llvm::EngineKind::JIT)
+				.setTargetOptions(options)
+				.setOptLevel(level)
+				.setMCJITMemoryManager(std::move(memory_mgr))
+				.create(engine_builder.selectTarget(
+                    _choose_native_target_triple(),
+					"" /* MArch" */,
+					"" /* MCPU */,
+					llvm::SmallVector<std::string>{})));
 
         if (!_execution_engine) {
             LOG_ERROR("[graph_execution_context] Failed to initialize execution engine : %s\n", error_string.c_str());

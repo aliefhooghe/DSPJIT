@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.9.0)
+cmake_minimum_required (VERSION 3.15)
 project (DSPJIT)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -13,6 +13,10 @@ find_package (LLVM REQUIRED)
 message (STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message (STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+# Use static runtime library on MSVC
+if (WIN32)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 ###----------###
 ### Targets  ###

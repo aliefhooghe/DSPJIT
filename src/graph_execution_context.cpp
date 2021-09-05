@@ -82,6 +82,7 @@ namespace DSPJIT {
         }
 
         _execution_engine->RegisterJITEventListener(&_obj_dumper);
+        _execution_engine->DisableLazyCompilation();
 
         // Create library module
         _library = std::make_unique<llvm::Module>("graph_execution_context.library", _llvm_context);

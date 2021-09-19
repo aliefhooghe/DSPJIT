@@ -234,10 +234,6 @@ namespace DSPJIT {
         lock_free_queue<ack_msg> _ack_msg_queue;
         lock_free_queue<compile_done_msg> _compile_done_msg_queue;
     };
-
-
-
-
 }
 
 #endif /* DSPJIT_GRAPH_EXECUTION_CONTEXT_H_ */

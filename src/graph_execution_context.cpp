@@ -22,7 +22,7 @@ namespace DSPJIT {
     {
         return llvm::Triple(
 #if defined(__linux__) || defined(__APPLE__)
-        // Select the defaut on linux and OSW machine
+        // Select the defaut on linux and OSX machine
         ""
 #elif defined _WIN32
         // Force elf on windows, as COFF relocation seems to cause trouble

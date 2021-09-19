@@ -1,6 +1,8 @@
 #ifndef DSPJIT_GRAPH_COMPILER_H_
 #define DSPJIT_GRAPH_COMPILER_H_
 
+#include <optional>
+
 #include <llvm/IR/IRBuilder.h>
 #include <graph_state_manager.h>
 
@@ -16,7 +18,9 @@ namespace DSPJIT {
     public:
         /**
          * \brief create a graph compiler
-         * \param builder a llm instrcution builder
+         * \param builder a llvm instrcution builder
+         * \param instance_num the llvm value containing the instance number
+         * \param state_mgr the graph state manager
          */
         graph_compiler(
             llvm::IRBuilder<>& builder,
@@ -25,7 +29,7 @@ namespace DSPJIT {
 
         /**
          * \brief assign values to a node
-         * \note can be used to implement graph input nodes 
+         * \note can be used to implement graph input nodes
          */
         void assign_values(
             const compile_node_class* node,
@@ -49,13 +53,21 @@ namespace DSPJIT {
         auto& builder() noexcept { return _builder; }
 
     private:
-        void compile_node(
+        // void compile_node(
+        //     const compile_node_class& node,
+        //     std::vector<llvm::Value*>& output);
+
+        std::optional<std::vector<llvm::Value*>> _scan_inputs(
+            std::vector<const compile_node_class*>& dependency_stack,
+            const compile_node_class& node);
+
+        void _emit_node_output_values(
             const compile_node_class& node,
-            std::vector<llvm::Value*>& output);
+            const std::vector<llvm::Value*>& inputs);
 
-        llvm::Value *create_zero();
+        llvm::Value *_create_zero();
 
-        value_memoize_map _nodes_value{};   ///< Used to memoize the output values produced by nodes during compilation
+        value_memoize_map _nodes_value{};   ///< Used to record the output values produced by nodes during compilation
         llvm::IRBuilder<>& _builder;        ///< builder used to emit ir code at relevant insert point
         llvm::Value *const _instance_num;   ///< used instance number value
         graph_state_manager& _state_mgr;    ///< calling execution context

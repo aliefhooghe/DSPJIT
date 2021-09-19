@@ -102,23 +102,28 @@ namespace DSPJIT {
                 llvm::Value*, llvm::Value*) const override;
     };
 
-    // Z^-1
-
+    // Z^-1: a non dependant process node
     class last_node : public compile_node_class {
 
     public:
         last_node()
-        :   compile_node_class{1u, 1u, sizeof(float)}
+        :   compile_node_class{1u, 1u, sizeof(float), false, false}
         {}
 
         void initialize_mutable_state(
                 llvm::IRBuilder<>& builder,
                 llvm::Value *mutable_state, llvm::Value*) const override;
 
-        std::vector<llvm::Value*> emit_outputs(
-                graph_compiler& compiler,
-                const std::vector<llvm::Value*>& inputs,
-                llvm::Value *mutable_state_ptr, llvm::Value*) const override;
+        std::vector<llvm::Value*> pull_output(
+            graph_compiler& compiler,
+            llvm::Value *mutable_state,
+            llvm::Value *static_memory) const override;
+
+        void push_input(
+            graph_compiler& compiler,
+            const std::vector<llvm::Value*>& inputs,
+            llvm::Value *mutable_state,
+            llvm::Value *static_memory) const override;
     };
 
     // Invert node

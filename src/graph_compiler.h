@@ -1,6 +1,7 @@
 #ifndef DSPJIT_GRAPH_COMPILER_H_
 #define DSPJIT_GRAPH_COMPILER_H_
 
+#include <deque>
 #include <optional>
 
 #include <llvm/IR/IRBuilder.h>
@@ -36,7 +37,7 @@ namespace DSPJIT {
             std::vector<llvm::Value*>&& values);
 
         /**
-         * \brief Compile a graph from a node and get node output value. The 
+         * \brief Compile a graph from a node and get node output value. The
          * visited nodes values are memoized for further calls
          * \param node The node whose output value is compiled
          * \param output_id Output whose value is needed
@@ -53,17 +54,19 @@ namespace DSPJIT {
         auto& builder() noexcept { return _builder; }
 
     private:
-        // void compile_node(
-        //     const compile_node_class& node,
-        //     std::vector<llvm::Value*>& output);
-
         std::optional<std::vector<llvm::Value*>> _scan_inputs(
-            std::vector<const compile_node_class*>& dependency_stack,
+            std::deque<const compile_node_class*>& dependency_stack,
             const compile_node_class& node);
 
-        void _emit_node_output_values(
+        void _push_node_input_values(
             const compile_node_class& node,
             const std::vector<llvm::Value*>& inputs);
+
+        void _get_node_output_values(
+            const compile_node_class& node,
+            const std::vector<llvm::Value*>& inputs);
+
+        std::vector<llvm::Value*>& _assign_null_values(const compile_node_class&);
 
         llvm::Value *_create_zero();
 

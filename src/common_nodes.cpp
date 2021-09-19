@@ -75,38 +75,41 @@ namespace DSPJIT {
         return {compiler.builder().CreateFMul(inputs[0], inputs[1])};
     }
 
-    // Last
-    std::vector<llvm::Value*> last_node::emit_outputs(
-        graph_compiler& compiler,
-        const std::vector<llvm::Value*>& inputs,
-        llvm::Value *mutable_state_ptr, llvm::Value*) const
-    {
-        auto& builder = compiler.builder();
-
-        //  Get pointer to state (= float instance)
-        auto state_ptr = builder.CreateBitCast(mutable_state_ptr, llvm::Type::getFloatPtrTy(builder.getContext()));
-
-        //  output <- State :   Load State
-        auto output = builder.CreateLoad(state_ptr);
-
-        //  state <- input  :   Store State
-        builder.CreateStore(inputs[0], state_ptr);
-
-        return {output};
-    }
 
     void last_node::initialize_mutable_state(
         llvm::IRBuilder<>& builder,
         llvm::Value *mutable_state, llvm::Value*) const
     {
         auto zero = llvm::ConstantFP::get(
-        builder.getContext(),
-        llvm::APFloat::getZero(llvm::APFloat::IEEEsingle()));
+            builder.getContext(),
+            llvm::APFloat::getZero(llvm::APFloat::IEEEsingle()));
 
         auto state_ptr = builder.CreateBitCast(mutable_state, llvm::Type::getFloatPtrTy(builder.getContext()));
         builder.CreateStore(zero, state_ptr);
     }
 
+    std::vector<llvm::Value*> last_node::pull_output(
+        graph_compiler& compiler,
+        llvm::Value *mutable_state,
+        llvm::Value *static_memory) const
+    {
+        auto& builder = compiler.builder();
+        auto state_ptr = builder.CreateBitCast(mutable_state, llvm::Type::getFloatPtrTy(builder.getContext()));
+        return {builder.CreateLoad(state_ptr)};
+    }
+
+    void last_node::push_input(
+        graph_compiler& compiler,
+        const std::vector<llvm::Value*>& inputs,
+        llvm::Value *mutable_state,
+        llvm::Value *static_memory) const
+    {
+        auto& builder = compiler.builder();
+        auto state_ptr = builder.CreateBitCast(mutable_state, llvm::Type::getFloatPtrTy(builder.getContext()));
+        builder.CreateStore(inputs[0], state_ptr);
+    }
+
+    // invert
     std::vector<llvm::Value*> invert_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,
@@ -117,6 +120,7 @@ namespace DSPJIT {
             llvm::ConstantFP::get(builder.getFloatTy(), 1.), inputs[0])};
     }
 
+    // negate
     std::vector<llvm::Value*> negate_node::emit_outputs(
         graph_compiler& compiler,
         const std::vector<llvm::Value*>& inputs,

@@ -144,12 +144,13 @@ TEST_CASE("cycle state : integrator")
     REQUIRE(output == Approx(0.f));
 }
 
-TEST_CASE("node state : z-1")
+TEST_CASE("node state/non dependant process : z-1")
 {
     LLVMContext llvm_context;
     graph_execution_context context{llvm_context};
     float input, output;
     compile_node_class in{0u, 1u}, out{1u, 0u};
+
     last_node node;
 
     in.connect(node, 0u);
@@ -160,7 +161,7 @@ TEST_CASE("node state : z-1")
 
     input = 1.f;
     context.process(&input, &output);
-    //  State are zeo initialized on creation
+    //  State are zero initialized on creation
     REQUIRE(output == Approx(0.f));
 
     input = 2.f;
@@ -174,6 +175,58 @@ TEST_CASE("node state : z-1")
     REQUIRE(output == Approx(0.f));
     context.process(&input, &output);
     REQUIRE(output == Approx(2.f));
+}
+
+TEST_CASE("node state/non dependant process : z-1 integrator with delayless cycle")
+{
+    LLVMContext llvm_context;
+    graph_execution_context context{llvm_context};
+
+    compile_node_class in{0u, 1u}, out{1u, 0u};
+    add_node add;
+    last_node delay;
+
+    const float input = 1.0f;
+    float output = 0.0f;
+
+    in.connect(add, 0u);
+    add.connect(delay, 0u);
+    delay.connect(add, 1u);
+    add.connect(out, 0u);
+
+    context.compile({in}, {out});
+    context.update_program();
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(1.0f));
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(2.0f));
+
+    //  Recompilation
+    context.compile({in}, {out});
+    context.update_program();
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(3.0f));
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(4.0f));
+
+    //  Recompilation again
+    context.compile({in}, {out});
+    context.update_program();
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(5.0f));
+
+    //  Disconnect the cycle and recompile
+    add.disconnect(1u);
+    context.compile({in}, {out});
+    context.update_program();
+
+    context.process(&input, &output);
+    REQUIRE(output == Approx(input));
 }
 
 class static_memory_simple_test : public compile_node_class

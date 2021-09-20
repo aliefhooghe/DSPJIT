@@ -104,10 +104,10 @@ namespace DSPJIT {
 
             _proc_info =
             {
-                .input_count = push_info.input_count,
-                .output_count = pull_info.output_count,
-                .mutable_state_size = push_info.mutable_state_size, // could be pull_info
-                .use_static_memory = push_info.use_static_memory    // here too
+                push_info.input_count,
+                pull_info.output_count,
+                push_info.mutable_state_size, // could be pull_info
+                push_info.use_static_memory    // here too
             };
             _symbols.initialize_symbol = rename_function(_initialize_symbol);
             _symbols.compute_symbols =

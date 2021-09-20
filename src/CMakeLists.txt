@@ -32,8 +32,10 @@ set(DSPJIT_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/compile_node_class.h
     ${CMAKE_CURRENT_SOURCE_DIR}/composite_node.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/composite_node.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin/external_plugin.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin/external_plugin.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin/external_plugin_node.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/external_plugin/external_plugin_node.h
     ${CMAKE_CURRENT_SOURCE_DIR}/graph_compiler.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/graph_compiler.h
     ${CMAKE_CURRENT_SOURCE_DIR}/graph_execution_context.cpp

@@ -62,7 +62,7 @@ namespace DSPJIT {
             const compile_node_class& node,
             const std::vector<llvm::Value*>& inputs);
 
-        void _get_node_output_values(
+        void _compute_node_output_values(
             const compile_node_class& node,
             const std::vector<llvm::Value*>& inputs);
 

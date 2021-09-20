@@ -1,4 +1,5 @@
 
+#include "log.h"
 #include "graph_compiler.h"
 #include "compile_node_class.h"
 
@@ -59,7 +60,7 @@ namespace DSPJIT {
 
                     // Do dependency computation if all dependency are computed
                     if (input_values.has_value()) {
-                        _get_node_output_values(*dependency, input_values.value());
+                        _compute_node_output_values(*dependency, input_values.value());
                         dependency_stack.pop_back();
                     }
                 }
@@ -68,7 +69,7 @@ namespace DSPJIT {
 
                     if (_nodes_value.find(dependency) == _nodes_value.end()) {
                         // First visit: Pull outputs
-                        _get_node_output_values(*dependency, {});
+                        _compute_node_output_values(*dependency, {});
                         dependency_stack.pop_back();
                         // Remember to push the input after the curent cycle have been resolver without delay
                         dependency_stack.push_front(dependency);
@@ -121,7 +122,8 @@ namespace DSPJIT {
                     const auto input_value = input_values_it->second[out_id];
 
                     if (input_value == nullptr) {
-                        // Found an unresolved cycle
+                        LOG_DEBUG("[graph_compiler][_scan_input] Resolving a cycle with an additional delay\n");
+
                         auto& state = _state_mgr.get_or_create(*input_node);
                         auto cycle_ptr =
                             state.get_cycle_state_ptr(_builder, _instance_num, out_id);
@@ -180,7 +182,7 @@ namespace DSPJIT {
         node.push_input(*this, inputs, state_ptr, static_memory_chunk);
     }
 
-    void graph_compiler::_get_node_output_values(
+    void graph_compiler::_compute_node_output_values(
         const compile_node_class& node,
         const std::vector<llvm::Value*>& inputs)
     {

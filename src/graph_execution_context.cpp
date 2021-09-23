@@ -136,10 +136,9 @@ namespace DSPJIT {
         llvm::raw_os_ostream stream{std::cout};
         if (llvm::verifyModule(*module, &stream))
         {
-            LOG_ERROR("\n[graph_execution_context][Compile Thread] Malformed IR code, canceling compilation\n");
             //  Do not compile to native code because malformed code could lead to crash
             //  Stay at last process_func.
-            return;
+            throw std::runtime_error("[graph_execution_context][Compile Thread] Malformed IR code was detected in graph module");
         }
 
         run_optimization(*module);
@@ -329,6 +328,7 @@ namespace DSPJIT {
             LOG_ERROR("[graph_execution_context][compile thread] Execution engine encountered an error while generation native code : %s\n",
                 _execution_engine->getErrorMessage());
             _execution_engine->clearErrorMessage();
+            throw std::runtime_error("[graph_execution_context][compile thread] Error while generating native code");
         }
 
         // Retrieve pointers to generated native code
@@ -348,8 +348,7 @@ namespace DSPJIT {
             LOG_DEBUG("[graph_execution_context][compile thread] Send compile_done message to process thread (seq = %u)\n", _current_sequence);
         }
         else {
-            LOG_ERROR("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !\n");
-            LOG_ERROR("[graph_execution_context][compile thread] Is process thread running ?\n");
+            throw std::runtime_error("[graph_execution_context][compile thread] Cannot send compile done msg to process thread : queue is full !");
         }
     }
 

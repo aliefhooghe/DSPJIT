@@ -80,7 +80,7 @@ namespace DSPJIT {
                         // Scan dependency inputs
                         const auto input_values = _scan_inputs(dependency_stack, *dependency);
 
-                        // Do dependency computation if all dependency are computed
+                        // Do dependency computation if all input are computed
                         if (input_values.has_value()) {
                             // Push inputs
                             _push_node_input_values(*dependency, input_values.value());

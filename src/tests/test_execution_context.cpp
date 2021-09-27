@@ -304,6 +304,9 @@ TEST_CASE("Static memory : simple")
     context.process(nullptr, &output);
     REQUIRE(output == Approx(0.f));
 
+    // refree the chunk should not trigger an exception (does nothing)
+    context.free_static_memory_chunk(node);
+
     // Set another chunk
     context.register_static_memory_chunk(node, create_dummy_chunk(11.f));
     context.compile({}, {out});

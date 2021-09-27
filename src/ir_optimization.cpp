@@ -22,6 +22,7 @@ namespace DSPJIT {
         pm.add(llvm::createDeadCodeEliminationPass());
         pm.add(llvm::createPromoteMemoryToRegisterPass());
         pm.add(llvm::createAggressiveDCEPass());
+        pm.add(llvm::createGlobalDCEPass());
         pm.run(m);
     }
 

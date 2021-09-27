@@ -141,6 +141,19 @@ namespace DSPJIT {
             throw std::runtime_error("[graph_execution_context][Compile Thread] Malformed IR code was detected in graph module");
         }
 
+        // Make all functions internal except the three that will be directly called
+        // This allow to remove all unused global code
+        for (auto& function: *module) {
+            const auto function_name = function.getName();
+            // Only these three function will be directly called
+            if (!(function_name.equals(process_function->getName()) ||
+                  function_name.equals(initialize_functions.initialize->getName()) ||
+                  function_name.equals(initialize_functions.initialize_new_nodes->getName())))
+            {
+                function.setLinkage(llvm::GlobalValue::LinkageTypes::InternalLinkage);
+            }
+        }
+
         run_optimization(*module);
 
         if (_ir_dump) {

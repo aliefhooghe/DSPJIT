@@ -143,6 +143,7 @@ namespace DSPJIT {
                     // This input_node was never visited and is not computed
                     dependency_stack.push_back(input_node);
                     all_input_computed = false;
+                    break; // do not push several not at once because we dont want a given node to be pushed twice
                 }
             }
         }

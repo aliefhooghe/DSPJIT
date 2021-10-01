@@ -8,7 +8,7 @@
 #include <llvm/Transforms/Utils/Cloning.h>
 
 #include <chrono>
-#include <iostream>
+#include <sstream>
 
 #include "graph_execution_context.h"
 #include "compile_node_class.h"
@@ -55,7 +55,7 @@ namespace DSPJIT {
 
         //  Initialize executionEngine
         auto memory_mgr =
-			std::unique_ptr<llvm::RTDyldMemoryManager>(new llvm::SectionMemoryManager());
+			std::unique_ptr<llvm::SectionMemoryManager>();
 
 		llvm::EngineBuilder engine_builder
         {
@@ -130,15 +130,6 @@ namespace DSPJIT {
             ir_helper::print_function(*process_function);
             ir_helper::print_function(*initialize_functions.initialize);
             ir_helper::print_function(*initialize_functions.initialize_new_nodes);
-        }
-
-        //  Check generated IR code
-        llvm::raw_os_ostream stream{std::cout};
-        if (llvm::verifyModule(*module, &stream))
-        {
-            //  Do not compile to native code because malformed code could lead to crash
-            //  Stay at last process_func.
-            throw std::runtime_error("[graph_execution_context][Compile Thread] Malformed IR code was detected in graph module");
         }
 
         // Make all functions internal except the three that will be directly called
@@ -333,6 +324,20 @@ namespace DSPJIT {
         llvm::Function *process_func,
         intialize_functions initialize_funcs)
     {
+        // Set a datalayout matching the execution engine
+        graph_module->setDataLayout(_execution_engine->getDataLayout());
+
+        //  Check generated IR code
+        std::stringstream error_stream;
+        llvm::raw_os_ostream stream{error_stream};
+        if (llvm::verifyModule(*graph_module, &stream))
+        {
+            //  Do not compile to native code because malformed code could lead to crash
+            //  Stay at last process_func.
+            LOG_ERROR("[graph_execution_context][Compile Thread] %s\n", error_stream.str().c_str());
+            throw std::runtime_error("[graph_execution_context][Compile Thread] Malformed IR code was detected in graph module");
+        }
+
         //  Compile module to native code
         _execution_engine->addModule(std::move(graph_module));
         _execution_engine->finalizeObject();

@@ -23,7 +23,7 @@ namespace DSPJIT {
         using native_process_func = void (*)(std::size_t instance_num, const float *inputs, float *outputs);
         using native_initialize_func = void (*)(std::size_t instance_num);
 
-        /* Default function implementation */
+        /* Default functions implementation */
         static constexpr auto default_process_func = [](std::size_t, const float*, float*) {};
         static constexpr auto default_initialize_func = [](std::size_t) {};
 
@@ -56,7 +56,7 @@ namespace DSPJIT {
             const opt_level level = opt_level::Default,
             const llvm::TargetOptions& options = llvm::TargetOptions{});
 
-        ~graph_execution_context();
+        ~graph_execution_context() noexcept = default;
 
         /*********************************************
          *   Compile Thread API
@@ -147,7 +147,7 @@ namespace DSPJIT {
          *   Used by Compile Thread
          *********************************************/
 
-        using intialize_functions = graph_state_manager::initialize_functions;
+        using initialize_functions = graph_state_manager::initialize_functions;
 
         llvm::LLVMContext& _llvm_context;
         const std::size_t _instance_count;                           ///< Number of state instances ready for execution
@@ -206,7 +206,7 @@ namespace DSPJIT {
         void _emit_native_code(
             std::unique_ptr<llvm::Module>&& graph_module,
             llvm::Function* process_funcs,
-            intialize_functions initialize_func);
+            initialize_functions initialize_func);
 
         /**
          *  \brief Process an acknowledgment message
@@ -220,7 +220,11 @@ namespace DSPJIT {
          *   Used by Process Thread
          *********************************************/
 
-        /* compile done msg process*/
+        /**
+         *  \brief Process a compile-done message
+         *  \param msg the message
+         *  \details the msg indicate to the process thread that a new process function is ready to be used
+         */
         void _process_compile_done_msg(const compile_done_msg msg);
 
         native_process_func _process_func{default_process_func};

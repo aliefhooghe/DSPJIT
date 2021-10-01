@@ -85,11 +85,6 @@ namespace DSPJIT {
         _library = std::make_unique<llvm::Module>("graph_execution_context.library", _llvm_context);
     }
 
-    graph_execution_context::~graph_execution_context()
-    {
-
-    }
-
     void graph_execution_context::add_library_module(std::unique_ptr<llvm::Module>&& module)
     {
         llvm::Linker::linkModules(*_library, std::move(module));
@@ -323,7 +318,7 @@ namespace DSPJIT {
     void graph_execution_context::_emit_native_code(
         std::unique_ptr<llvm::Module>&& graph_module,
         llvm::Function *process_func,
-        intialize_functions initialize_funcs)
+        initialize_functions initialize_funcs)
     {
         // Set a datalayout matching the execution engine
         //graph_module->setDataLayout(_execution_engine->getDataLayout());

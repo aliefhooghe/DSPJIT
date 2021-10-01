@@ -7,6 +7,7 @@ namespace ir_helper {
 
     void print_module(const llvm::Module& module);
     void print_function(const llvm::Function& function);
+    bool check_module(const llvm::Module& module, std::string& error_string);
 
 }
 

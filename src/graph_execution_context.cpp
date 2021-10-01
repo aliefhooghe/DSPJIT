@@ -1,6 +1,5 @@
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
@@ -136,10 +135,12 @@ namespace DSPJIT {
         // This allow to remove all unused global code
         for (auto& function: *module) {
             const auto function_name = function.getName();
-            // Only these three function will be directly called
-            if (!(function_name.equals(process_function->getName()) ||
-                  function_name.equals(initialize_functions.initialize->getName()) ||
-                  function_name.equals(initialize_functions.initialize_new_nodes->getName())))
+            // Set all function to internal linkage, excepted the external functions (declarations)
+            // and the process api functions which will be called directly
+            if (!function.isDeclaration() &&
+                !(&function == process_function ||
+                  &function == initialize_functions.initialize ||
+                  &function == initialize_functions.initialize_new_nodes))
             {
                 function.setLinkage(llvm::GlobalValue::LinkageTypes::InternalLinkage);
             }
@@ -325,17 +326,14 @@ namespace DSPJIT {
         intialize_functions initialize_funcs)
     {
         // Set a datalayout matching the execution engine
-        graph_module->setDataLayout(_execution_engine->getDataLayout());
+        //graph_module->setDataLayout(_execution_engine->getDataLayout());
 
         //  Check generated IR code
-        std::stringstream error_stream;
-        llvm::raw_os_ostream stream{error_stream};
-        if (llvm::verifyModule(*graph_module, &stream))
-        {
+        std::string error_string;
+        if (ir_helper::check_module(*graph_module, error_string)) {
             //  Do not compile to native code because malformed code could lead to crash
             //  Stay at last process_func.
-            LOG_ERROR("[graph_execution_context][Compile Thread] %s\n", error_stream.str().c_str());
-            throw std::runtime_error("[graph_execution_context][Compile Thread] Malformed IR code was detected in graph module");
+            throw std::runtime_error("[graph_execution_context][Compile Thread] Malformed IR code was detected in graph module: " + error_string);
         }
 
         //  Compile module to native code

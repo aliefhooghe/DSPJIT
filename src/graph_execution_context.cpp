@@ -111,7 +111,7 @@ namespace DSPJIT {
         _state_manager.begin_sequence(_current_sequence);
 
         //  Create module and link library into it
-        auto module = std::make_unique<llvm::Module>("graph_execution_context.dsp." + _current_sequence, _llvm_context);
+        auto module = std::make_unique<llvm::Module>("graph_execution_context.dsp." + std::to_string(_current_sequence), _llvm_context);
         llvm::Linker::linkModules(*module, llvm::CloneModule(*_library));
 
         //  Compile process function
@@ -342,7 +342,7 @@ namespace DSPJIT {
 
         if (_execution_engine->hasError()) {
             LOG_ERROR("[graph_execution_context][compile thread] Execution engine encountered an error while generation native code : %s\n",
-                _execution_engine->getErrorMessage());
+                _execution_engine->getErrorMessage().c_str());
             _execution_engine->clearErrorMessage();
             throw std::runtime_error("[graph_execution_context][compile thread] Error while generating native code");
         }

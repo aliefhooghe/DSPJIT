@@ -1,18 +1,17 @@
 
-#include "log.h"
-#include "graph_compiler.h"
-#include "compile_node_class.h"
+#include <DSPJIT/log.h>
+
+#include <DSPJIT/graph_compiler.h>
 
 namespace DSPJIT {
-
 
     graph_compiler::graph_compiler(
         llvm::IRBuilder<>& builder,
         llvm::Value *instance_num,
-        graph_state_manager& state_mgr)
+        abstract_graph_memory_manager& memory_mgr)
     :   _builder{builder},
         _instance_num{instance_num},
-        _state_mgr{state_mgr}
+        _memory_mgr{memory_mgr}
     {
     }
 
@@ -124,7 +123,7 @@ namespace DSPJIT {
                     if (input_value == nullptr) {
                         LOG_DEBUG("[graph_compiler][_scan_input] Resolving a cycle with an additional delay\n");
 
-                        auto& state = _state_mgr.get_or_create(*input_node);
+                        auto& state = _memory_mgr.get_or_create(*input_node);
                         auto cycle_ptr =
                             state.get_cycle_state_ptr(_builder, _instance_num, out_id);
 
@@ -160,7 +159,7 @@ namespace DSPJIT {
         const compile_node_class& node,
         const std::vector<llvm::Value*>& inputs)
     {
-        auto& state = _state_mgr.get_or_create(node);
+        auto& state = _memory_mgr.get_or_create(node);
         llvm::Value *state_ptr = nullptr;
         llvm::Value *static_memory_chunk = nullptr;
 
@@ -168,7 +167,7 @@ namespace DSPJIT {
             state_ptr = state.get_mutable_state_ptr(_builder, _instance_num);
 
         if (node.use_static_memory) {
-            auto memory_chunk = _state_mgr.get_static_memory_ref(_builder, node);
+            auto memory_chunk = _memory_mgr.get_static_memory_ref(_builder, node);
 
             if (memory_chunk == nullptr) {
                 // No memory chunk was registered for this node : it can't be compiled
@@ -187,7 +186,7 @@ namespace DSPJIT {
         const compile_node_class& node,
         const std::vector<llvm::Value*>& inputs)
     {
-        auto& state = _state_mgr.get_or_create(node);
+        auto& state = _memory_mgr.get_or_create(node);
 
         // get mutable state and static memory ptr if needed
         llvm::Value *state_ptr = nullptr;
@@ -197,7 +196,7 @@ namespace DSPJIT {
             state_ptr = state.get_mutable_state_ptr(_builder, _instance_num);
 
         if (node.use_static_memory) {
-            auto memory_chunk = _state_mgr.get_static_memory_ref(_builder, node);
+            auto memory_chunk = _memory_mgr.get_static_memory_ref(_builder, node);
 
             if (memory_chunk == nullptr) {
                 // No memory chunk was registered for this node : it can't be compiled

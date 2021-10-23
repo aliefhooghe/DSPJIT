@@ -5,9 +5,9 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
-#include "common_nodes.h"
-#include "composite_node.h"
-#include "graph_execution_context.h"
+#include <DSPJIT/graph_execution_context_factory.h>
+#include <DSPJIT/composite_node.h>
+#include <DSPJIT/common_nodes.h>
 
 using namespace llvm;
 using namespace DSPJIT;
@@ -21,7 +21,8 @@ using namespace DSPJIT;
 TEST_CASE("Composite Compile Node", "composite_node")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
     compile_node_class in{0u, 1u}, out{1u, 0u};
     float input, output;
 
@@ -49,4 +50,3 @@ TEST_CASE("Composite Compile Node", "composite_node")
     context.process(&input, &output);
     REQUIRE(output == Approx(0.f));
 }
-

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "external_plugin.h"
+#include <DSPJIT/external_plugin.h>
 
 namespace DSPJIT {
 

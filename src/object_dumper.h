@@ -5,20 +5,20 @@
 
 namespace DSPJIT {
 
-    class graph_execution_context;
+    // class graph_execution_context;
 
-    class object_dumper : public llvm::JITEventListener {
+    // class object_dumper : public llvm::JITEventListener {
 
-    public:
-        object_dumper(graph_execution_context&);
+    // public:
+    //     object_dumper(graph_execution_context&);
 
-        void notifyObjectLoaded(
-            ObjectKey,
-            const llvm::object::ObjectFile &,
-            const llvm::RuntimeDyld::LoadedObjectInfo &) override;
-    private:
-        graph_execution_context& _context;
-    };
+    //     void notifyObjectLoaded(
+    //         ObjectKey,
+    //         const llvm::object::ObjectFile &,
+    //         const llvm::RuntimeDyld::LoadedObjectInfo &) override;
+    // private:
+    //     graph_execution_context& _context;
+    // };
 
 }
 

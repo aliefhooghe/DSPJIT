@@ -3,10 +3,10 @@
 #include <iostream>
 #include <algorithm>
 
+#include <DSPJIT/compile_node_class.h>
+#include <DSPJIT/ir_helper.h>
+
 #include "ir_optimization.h"
-#include "ir_helper.h"
-#include "compile_node_class.h"
-#include "graph_state_manager.h"
 
 namespace DSPJIT {
 

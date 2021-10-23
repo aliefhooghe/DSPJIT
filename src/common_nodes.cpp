@@ -2,9 +2,9 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/IRBuilder.h>
 
-#include "common_nodes.h"
-#include "graph_compiler.h"
-#include "ir_helper.h"
+#include <DSPJIT/common_nodes.h>
+#include <DSPJIT/graph_compiler.h>
+#include <DSPJIT/ir_helper.h>
 
 namespace DSPJIT {
 

@@ -1,6 +1,7 @@
 
-#include "composite_node.h"
-#include "graph_compiler.h"
+#include <DSPJIT/composite_node.h>
+
+#include <DSPJIT/graph_compiler.h>
 
 namespace DSPJIT {
 

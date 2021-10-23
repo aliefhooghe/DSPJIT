@@ -1,5 +1,5 @@
-#ifndef JITTEST_COMPILE_NODE_CLASS_H
-#define JITTEST_COMPILE_NODE_CLASS_H
+#ifndef DSPJIT_COMPILE_NODE_CLASS_H
+#define DSPJIT_COMPILE_NODE_CLASS_H
 
 #include <llvm/IR/Value.h>
 #include <llvm/IR/IRBuilder.h>
@@ -11,21 +11,18 @@
 #include <set>
 
 #include "node.h"
-#include "graph_state_manager.h"
-#include "log.h"
 
 namespace DSPJIT {
 
     class graph_compiler;
 
    /**
-    * \brief
+    * \brief Emit code which consume input values and produce output values
     */
     class compile_node_class : public node<compile_node_class> {
 
     public:
         /**
-         * \brief
          * \param input_count
          * \param output_count
          * \param mutable_state_size
@@ -78,7 +75,6 @@ namespace DSPJIT {
             llvm::Value *mutable_state,
             llvm::Value *static_memory) const
         { return {}; }
-
 
         /**
          * \brief Emit the process code which consume input value in case of non dependant process node

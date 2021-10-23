@@ -5,9 +5,9 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
-#include "common_nodes.h"
-#include "composite_node.h"
-#include "graph_execution_context.h"
+#include <DSPJIT/graph_execution_context_factory.h>
+#include <DSPJIT/graph_compiler.h>
+#include <DSPJIT/common_nodes.h>
 
 using namespace llvm;
 using namespace DSPJIT;
@@ -22,7 +22,8 @@ using namespace DSPJIT;
 TEST_CASE("input to output", "input_output_one_instance")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
 
     compile_node_class input{0u, 1u};
     compile_node_class output{1u, 0u};
@@ -43,7 +44,8 @@ TEST_CASE("input to output", "input_output_one_instance")
 TEST_CASE("output alone", "input_alone")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
 
     compile_node_class output{1u, 0u};
     context.compile({}, {output});
@@ -58,7 +60,8 @@ TEST_CASE("output alone", "input_alone")
 TEST_CASE("Add graph 1", "add_graph 1")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
 
     compile_node_class in1{0u, 1u}, in2{0u, 1u};
     compile_node_class out{1u, 0u};
@@ -82,7 +85,8 @@ TEST_CASE("Add graph 1", "add_graph 1")
 TEST_CASE("cycle state : integrator")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
 
     compile_node_class in{0u, 1u}, out{1u, 0u};
     const float input = 1.0f;
@@ -147,7 +151,8 @@ TEST_CASE("cycle state : integrator")
 TEST_CASE("node state/non dependant process : z-1")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
     float input, output;
     compile_node_class in{0u, 1u}, out{1u, 0u};
 
@@ -180,7 +185,8 @@ TEST_CASE("node state/non dependant process : z-1")
 TEST_CASE("node state/non dependant process : z-1 integrator with delayless cycle")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
 
     compile_node_class in{0u, 1u}, out{1u, 0u};
     add_node add;
@@ -262,7 +268,8 @@ static std::vector<uint8_t> create_dummy_chunk(float value)
 TEST_CASE("Static memory : simple")
 {
     LLVMContext llvm_context;
-    graph_execution_context context{llvm_context};
+    graph_execution_context context =
+        graph_execution_context_factory::build(llvm_context);
     compile_node_class out{1u, 0u};
     static_memory_simple_test node;
 

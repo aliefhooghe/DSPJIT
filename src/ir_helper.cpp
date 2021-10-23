@@ -1,13 +1,12 @@
 
+#include <sstream>
+#include <iostream>
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_os_ostream.h>
 
-#include <sstream>
-#include <iostream>
-
-#include "log.h"
-#include "ir_helper.h"
+#include <DSPJIT/log.h>
+#include <DSPJIT/ir_helper.h>
 
 #ifdef WIN32
 #include <Windows.h>

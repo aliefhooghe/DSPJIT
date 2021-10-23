@@ -5,7 +5,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
-#include "node.h"
+#include <DSPJIT/node.h>
 
 using namespace DSPJIT;
 

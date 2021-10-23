@@ -5,14 +5,14 @@
 #include <optional>
 
 #include <llvm/IR/IRBuilder.h>
-#include <graph_state_manager.h>
+#include "abstract_graph_memory_manager.h"
 
 namespace DSPJIT {
 
     /**
      * \brief Helper class for graph compilation
      */
-    class graph_compiler 
+    class graph_compiler
     {
         using value_memoize_map = std::map<const compile_node_class*, std::vector<llvm::Value*>>;
 
@@ -26,7 +26,7 @@ namespace DSPJIT {
         graph_compiler(
             llvm::IRBuilder<>& builder,
             llvm::Value *instance_num,
-            graph_state_manager& state_mgr);
+            abstract_graph_memory_manager& state_mgr);
 
         /**
          * \brief assign values to a node
@@ -41,7 +41,7 @@ namespace DSPJIT {
          * visited nodes values are memoized for further calls
          * \param node The node whose output value is compiled
          * \param output_id Output whose value is needed
-         * \return 
+         * \return
          */
         llvm::Value* node_value(
             const compile_node_class* node,
@@ -70,10 +70,10 @@ namespace DSPJIT {
 
         llvm::Value *_create_zero();
 
-        value_memoize_map _nodes_value{};   ///< Used to record the output values produced by nodes during compilation
-        llvm::IRBuilder<>& _builder;        ///< builder used to emit ir code at relevant insert point
-        llvm::Value *const _instance_num;   ///< used instance number value
-        graph_state_manager& _state_mgr;    ///< calling execution context
+        value_memoize_map _nodes_value{};             ///< Used to record the output values produced by nodes during compilation
+        llvm::IRBuilder<>& _builder;                  ///< builder used to emit ir code at relevant insert point
+        llvm::Value *const _instance_num;             ///< used instance number value
+        abstract_graph_memory_manager& _memory_mgr;   ///< graph memory manager used accros compilations
     };
 
 }

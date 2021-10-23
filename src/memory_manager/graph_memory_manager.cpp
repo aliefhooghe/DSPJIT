@@ -1,114 +1,48 @@
 
-#include "graph_state_manager.h"
-#include "compile_node_class.h"
+#include <DSPJIT/log.h>
+
+#include <DSPJIT/graph_memory_manager.h>
 
 namespace DSPJIT {
 
-    graph_state_manager::mutable_node_state::mutable_node_state(
-        graph_state_manager& manager,
-        std::size_t state_size,
-        std::size_t instance_count,
-        std::size_t output_count)
-    :   _manager{manager},
-        _cycle_state(instance_count * output_count, 0.f),
-        _data(state_size * instance_count, 0u),
-        _node_output_count{output_count},
-        _instance_count{instance_count},
-        _size{state_size}
-    {
-
-    }
-
-    llvm::Value *graph_state_manager::mutable_node_state::get_cycle_state_ptr(
-        llvm::IRBuilder<>& builder,
-        llvm::Value *instance_num_value,
-        std::size_t output_id)
-    {
-        const auto pointer =
-            _cycle_state.data() + output_id * _instance_count;
-        _manager._declare_used_cycle_state(this, output_id);
-        return
-            builder.CreateGEP(
-                builder.CreateIntToPtr(
-                    llvm::ConstantInt::get(
-                        builder.getIntNTy(sizeof(float*) * 8),
-                        reinterpret_cast<intptr_t>(pointer)),
-                    llvm::Type::getFloatPtrTy(_manager.get_llvm_context())),
-                instance_num_value);
-    }
-
-    llvm::Value *graph_state_manager::mutable_node_state::get_mutable_state_ptr(
-        llvm::IRBuilder<>& builder,
-        llvm::Value *instance_num_value)
-    {
-        if (_size == 0u) {
-            return nullptr;
-        }
-        else {
-            return
-                builder.CreateGEP(
-                    builder.CreateIntToPtr(
-                        llvm::ConstantInt::get(
-                            builder.getIntNTy(sizeof(uint8_t*) * 8),
-                            reinterpret_cast<intptr_t>(_data.data())),
-                        builder.getInt8PtrTy()),
-                    builder.CreateMul(
-                        instance_num_value,
-                        llvm::ConstantInt::get(builder.getInt64Ty(), _size)));
-        }
-    }
-
-    void graph_state_manager::mutable_node_state::_update_output_count(std::size_t output_count)
-    {
-        LOG_DEBUG("Update output count %llu -> %llu\n", _node_output_count, output_count);
-        const auto cycle_state_size = output_count * _instance_count;
-        _node_output_count = output_count;
-        if (_cycle_state.size() <= cycle_state_size)
-            _cycle_state.resize(cycle_state_size);
-    }
-
     // Delete sequence implementation
 
-    graph_state_manager::delete_sequence::delete_sequence(
-        llvm::ExecutionEngine* engine,
+    graph_memory_manager::delete_sequence::delete_sequence(
+        abstract_execution_engine* engine,
         llvm::Module *module) noexcept
     :   _engine{engine}, _module{module}
     {
     }
 
-    graph_state_manager::delete_sequence::~delete_sequence()
+    graph_memory_manager::delete_sequence::~delete_sequence()
     {
         if (_engine && _module) {
             LOG_DEBUG("[graph_execution_context][compile thread] ~delete_sequence : delete module and %u node stats\n",
                       static_cast<unsigned int>(_node_states.size()));
-            //  llvm execution transfert module's ownership,so we must delete it
-            if (_engine->removeModule(_module))
-                delete _module;
-            else
-                LOG_ERROR("[graph_execution_context][compile thread] ~delete_sequence : cannot delete the module !\n");
+            _engine->delete_module(_module);
         }
     }
 
-    graph_state_manager::delete_sequence::delete_sequence(delete_sequence &&o) noexcept
+    graph_memory_manager::delete_sequence::delete_sequence(delete_sequence &&o) noexcept
         : _engine{o._engine}, _module{o._module}, _node_states{std::move(o._node_states)}
     {
         o._engine = nullptr;
         o._module = nullptr;
     }
 
-    void graph_state_manager::delete_sequence::add_deleted_node(mutable_node_state && state)
+    void graph_memory_manager::delete_sequence::add_deleted_node(node_state && state)
     {
         _node_states.emplace_back(std::move(state));
     }
 
-    void graph_state_manager::delete_sequence::add_deleted_static_data(std::vector<uint8_t>&& data)
+    void graph_memory_manager::delete_sequence::add_deleted_static_data(std::vector<uint8_t>&& data)
     {
         _static_data_chunks.emplace_back(std::move(data));
     }
 
     // Graph state manager implementation
 
-    graph_state_manager::graph_state_manager(
+    graph_memory_manager::graph_memory_manager(
         llvm::LLVMContext& llvm_context,
         std::size_t instance_count,
         compile_sequence_t initial_sequence_number)
@@ -119,7 +53,7 @@ namespace DSPJIT {
         _delete_sequence.emplace(initial_sequence_number, delete_sequence{});
     }
 
-    void graph_state_manager::begin_sequence(const compile_sequence_t seq)
+    void graph_memory_manager::begin_sequence(const compile_sequence_t seq)
     {
         _sequence_new_nodes.clear();
         _sequence_used_nodes.clear();
@@ -127,7 +61,8 @@ namespace DSPJIT {
         _current_sequence_number = seq;
     }
 
-    graph_state_manager::initialize_functions graph_state_manager::finish_sequence(llvm::ExecutionEngine& engine, llvm::Module& module)
+    abstract_graph_memory_manager::initialize_functions graph_memory_manager::finish_sequence(
+        abstract_execution_engine& engine, llvm::Module& module)
     {
         node_list used_nodes{};
 
@@ -165,7 +100,7 @@ namespace DSPJIT {
         };
     }
 
-    llvm::Function* graph_state_manager::_compile_initialize_function(
+    llvm::Function* graph_memory_manager::_compile_initialize_function(
         const std::string& symbol,
         const node_list& nodes,
         cycle_state_set* cycles_states,
@@ -231,12 +166,12 @@ namespace DSPJIT {
         return function;
     }
 
-    void graph_state_manager::_declare_used_cycle_state(mutable_node_state* state, unsigned int output_id)
+    void graph_memory_manager::_declare_used_cycle_state(node_state* state, unsigned int output_id)
     {
         _sequence_used_cycle_states.emplace(state, output_id);
     }
 
-    void graph_state_manager::using_sequence(const compile_sequence_t seq)
+    void graph_memory_manager::using_sequence(const compile_sequence_t seq)
     {
         //  Erase all delete sequences older than the used sequence
         _delete_sequence.erase(
@@ -244,7 +179,7 @@ namespace DSPJIT {
             _delete_sequence.lower_bound(seq));
     }
 
-    graph_state_manager::mutable_node_state& graph_state_manager::get_or_create(const compile_node_class& node)
+    node_state& graph_memory_manager::get_or_create(const compile_node_class& node)
     {
         auto state_it = _state.find(&node);
 
@@ -252,7 +187,7 @@ namespace DSPJIT {
             //  Create the state if needed
             state_it = _state.emplace(
                 &node,
-                mutable_node_state{*this, node.mutable_state_size, _instance_count, node.get_output_count()}).first;
+                node_state{*this, node.mutable_state_size, _instance_count, node.get_output_count()}).first;
             //  Remember that this state is a new state
             _sequence_new_nodes.push_back(&node);
         }
@@ -267,7 +202,7 @@ namespace DSPJIT {
         return state_it->second;
     }
 
-    void graph_state_manager::register_static_memory_chunk(const compile_node_class& node, std::vector<uint8_t>&& data)
+    void graph_memory_manager::register_static_memory_chunk(const compile_node_class& node, std::vector<uint8_t>&& data)
     {
         const auto chunk_it = _static_memory.find(&node);
 
@@ -280,7 +215,7 @@ namespace DSPJIT {
         }
     }
 
-    void graph_state_manager::free_static_memory_chunk(const compile_node_class& node)
+    void graph_memory_manager::free_static_memory_chunk(const compile_node_class& node)
     {
         auto chunk_it = _static_memory.find(&node);
 
@@ -293,7 +228,7 @@ namespace DSPJIT {
         }
     }
 
-    llvm::Value *graph_state_manager::get_static_memory_ref(llvm::IRBuilder<>& builder, const compile_node_class& node)
+    llvm::Value *graph_memory_manager::get_static_memory_ref(llvm::IRBuilder<>& builder, const compile_node_class& node)
     {
         const auto it = _static_memory.find(&node);
 
@@ -309,7 +244,17 @@ namespace DSPJIT {
         }
     }
 
-    void graph_state_manager::_trash_static_memory_chunk(static_memory_map::iterator chunk_it)
+    llvm::LLVMContext& graph_memory_manager::get_llvm_context() const noexcept
+    {
+        return _llvm_context;
+    }
+
+    std::size_t graph_memory_manager::get_instance_count() const noexcept
+    {
+        return _instance_count;
+    }
+
+    void graph_memory_manager::_trash_static_memory_chunk(static_memory_map::iterator chunk_it)
     {
         auto previous_delete_sequence_it = _delete_sequence.rbegin();
 

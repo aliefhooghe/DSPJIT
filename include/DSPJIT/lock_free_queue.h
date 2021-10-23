@@ -1,7 +1,7 @@
-#ifndef LOCK_FREE_QUEUE_H_
-#define LOCK_FREE_QUEUE_H_
+#ifndef DSPJIT_LOCK_FREE_QUEUE_H_
+#define DSPJIT_LOCK_FREE_QUEUE_H_
 
-#include <cstddef> //size_t
+#include <cstddef>
 #include <stdexcept>
 #include <vector>
 #include <atomic>
@@ -9,15 +9,10 @@
 
 namespace DSPJIT
 {
-    /*
-    *
-    *  Lock free ONE Consumer - ONE Provider Queue
-    *
-    *
-    *
-    *   -> [back|||||||||||||||front] ->
-    *   enqueue                        dequeue
-    */
+    /*  Lock free ONE Consumer - ONE Provider Queue
+     *   -> [back|||||||||||||||front] ->
+     *   enqueue                        dequeue
+     */
 
     template <class T>
     class lock_free_queue

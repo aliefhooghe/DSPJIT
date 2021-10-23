@@ -5,12 +5,9 @@
 #include <vector>
 #include <map>
 
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-
-#include "graph_state_manager.h"
-#include "graph_compiler.h"
-#include "lock_free_queue.h"
-#include "object_dumper.h"
+#include <DSPJIT/abstract_execution_engine.h>
+#include <DSPJIT/abstract_graph_memory_manager.h>
+#include <DSPJIT/lock_free_queue.h>
 
 namespace DSPJIT {
 
@@ -28,16 +25,14 @@ namespace DSPJIT {
         static constexpr auto default_initialize_func = [](std::size_t) {};
 
         /** ack_msg are sent from process thread to compile thread */
-        using ack_msg = compile_sequence_t;
+        using ack_msg = abstract_graph_memory_manager::compile_sequence_t;
 
         /** compile_done_msg are sent from compile thread to process thread */
         struct compile_done_msg {
-            compile_sequence_t seq;
+            abstract_graph_memory_manager::compile_sequence_t seq;
             native_process_func process_func;
             native_initialize_func initialize_func;
         };
-
-        friend class object_dumper;
 
     public:
         using opt_level = llvm::CodeGenOpt::Level;
@@ -51,10 +46,11 @@ namespace DSPJIT {
          * \param options Native code generation options
          */
         graph_execution_context(
-            llvm::LLVMContext& llvm_context,
-            std::size_t instance_count = 1u,
-            const opt_level level = opt_level::Default,
-            const llvm::TargetOptions& options = llvm::TargetOptions{});
+            std::unique_ptr<abstract_execution_engine>&&,
+            std::unique_ptr<abstract_graph_memory_manager>&&);
+
+        graph_execution_context(const graph_execution_context&) = delete;
+        graph_execution_context(graph_execution_context&&) = delete;
 
         ~graph_execution_context() noexcept = default;
 
@@ -81,12 +77,6 @@ namespace DSPJIT {
          * \param enable Print IR if true
          */
         void enable_ir_dump(bool enable = true);
-
-        /**
-         * \brief Get a pointer to the last generated native code object
-         * \note Should be used for debug purpose
-         */
-        const uint8_t *get_native_code(std::size_t& size);
 
         /**
          * \brief Create if needed and set a global constant,
@@ -147,19 +137,19 @@ namespace DSPJIT {
          *   Used by Compile Thread
          *********************************************/
 
-        using initialize_functions = graph_state_manager::initialize_functions;
+        using initialize_functions = abstract_graph_memory_manager::initialize_functions;
 
         llvm::LLVMContext& _llvm_context;
         const std::size_t _instance_count;                           ///< Number of state instances ready for execution
-        std::unique_ptr<llvm::ExecutionEngine> _execution_engine;   ///< execution engine is used for just in time compilation
-        std::unique_ptr<llvm::Module> _library{};                   ///< code available for execution from graph node
-        compile_sequence_t _current_sequence;                       ///< current compilation sequence number
-        graph_state_manager _state_manager;                         ///< manage the state of the graph across recompilations
-        // debug fields:
+        std::unique_ptr<llvm::Module> _library{};                    ///< code available for execution from graph node
+
+        std::unique_ptr<abstract_execution_engine> _execution_engine{};
+        std::unique_ptr<abstract_graph_memory_manager> _state_manager{};
+
+        abstract_graph_memory_manager::compile_sequence_t _current_sequence;  ///< current compilation sequence number
+
+        // debug:
         bool _ir_dump{false};                                       ///< print IR on logs if enabled
-        object_dumper _obj_dumper;
-        const uint8_t *_last_native_code_object_data{nullptr};
-        std::size_t _last_native_code_object_size{0u};
 
         /**
          * \brief Compile the process function

@@ -1,6 +1,7 @@
 
+#include <DSPJIT/graph_compiler.h>
+
 #include "external_plugin_node.h"
-#include "graph_compiler.h"
 
 namespace DSPJIT {
     external_plugin_node::external_plugin_node(

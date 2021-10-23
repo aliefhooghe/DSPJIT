@@ -6,7 +6,7 @@
 #include <windows.h>
 #endif
 
-#include "log.h"
+#include <DSPJIT/log.h>
 
 namespace DSPJIT {
 

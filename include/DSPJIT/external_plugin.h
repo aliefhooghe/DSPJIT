@@ -7,7 +7,7 @@
 #include <variant>
 #include <vector>
 
-#include "compile_node_class.h"
+#include <DSPJIT/compile_node_class.h>
 
 namespace DSPJIT {
 

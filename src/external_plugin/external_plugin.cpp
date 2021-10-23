@@ -1,16 +1,14 @@
-#include <sstream>
-
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Transforms/Utils/Cloning.h>
 #include <llvm/Linker/Linker.h>
 
-#include "external_plugin.h"
-#include "external_plugin_node.h"
-#include "graph_compiler.h"
-#include "ir_helper.h"
+#include <DSPJIT/external_plugin.h>
+#include <DSPJIT/graph_compiler.h>
+#include <DSPJIT/ir_helper.h>
+#include <DSPJIT/log.h>
 
-#include <iostream>
+#include "external_plugin_node.h"
 
 namespace DSPJIT {
 

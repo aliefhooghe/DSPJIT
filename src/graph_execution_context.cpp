@@ -7,80 +7,28 @@
 #include <llvm/Transforms/Utils/Cloning.h>
 
 #include <chrono>
-#include <sstream>
 
-#include "graph_execution_context.h"
-#include "compile_node_class.h"
+#include <DSPJIT/graph_compiler.h>
+#include <DSPJIT/graph_execution_context.h>
+#include <DSPJIT/ir_helper.h>
+#include <DSPJIT/log.h>
+
 #include "ir_optimization.h"
-#include "ir_helper.h"
-#include "log.h"
+
 
 namespace DSPJIT {
 
-    static llvm::Triple _choose_native_target_triple()
-    {
-        return llvm::Triple(
-#if defined(__linux__) || defined(__APPLE__)
-        // Select the defaut on linux and OSX machine
-        ""
-#elif defined _WIN32
-        // Force elf on windows, as COFF relocation seems to cause trouble
-        "x86_64-pc-win32-elf"
-#endif
-        );
-    }
-
     graph_execution_context::graph_execution_context(
-        llvm::LLVMContext& llvm_context,
-        std::size_t instance_count,
-        const opt_level level,
-        const llvm::TargetOptions& options)
-    :   _llvm_context{llvm_context},
-        _instance_count{instance_count},
+        std::unique_ptr<abstract_execution_engine>&& execution_engine,
+        std::unique_ptr<abstract_graph_memory_manager>&& state_manager)
+    :   _llvm_context{state_manager->get_llvm_context()},
+        _instance_count{state_manager->get_instance_count()},
         _current_sequence{0u},
-        _state_manager{llvm_context, instance_count, _current_sequence},
-        _obj_dumper{*this},
+        _execution_engine{std::move(execution_engine)},
+        _state_manager{std::move(state_manager)},
         _ack_msg_queue{256},
         _compile_done_msg_queue{256}
     {
-        std::string error_string{};
-        static auto llvm_native_was_init = false;
-        if (llvm_native_was_init == false) {
-            llvm::InitializeNativeTarget();
-            llvm::InitializeNativeTargetAsmPrinter();
-            LLVMLinkInMCJIT();
-            llvm_native_was_init = true;
-        }
-
-        //  Initialize executionEngine
-        auto memory_mgr =
-			std::unique_ptr<llvm::SectionMemoryManager>();
-
-		llvm::EngineBuilder engine_builder
-        {
-            std::make_unique<llvm::Module>("base", _llvm_context)
-        };
-
-		_execution_engine =
-			std::unique_ptr<llvm::ExecutionEngine>(
-				engine_builder
-				.setErrorStr(&error_string)
-				.setEngineKind(llvm::EngineKind::JIT)
-				.setTargetOptions(options)
-				.setOptLevel(level)
-				.setMCJITMemoryManager(std::move(memory_mgr))
-				.create(engine_builder.selectTarget(
-                    _choose_native_target_triple(),
-					"" /* MArch" */,
-					"" /* MCPU */,
-					llvm::SmallVector<std::string>{})));
-
-        if (!_execution_engine)
-            throw std::runtime_error("Failed to initialize execution engine :" + error_string);
-
-        _execution_engine->RegisterJITEventListener(&_obj_dumper);
-        _execution_engine->DisableLazyCompilation();
-
         // Create library module
         _library = std::make_unique<llvm::Module>("graph_execution_context.library", _llvm_context);
     }
@@ -103,7 +51,7 @@ namespace DSPJIT {
 
         //  Start a new sequence
         _current_sequence++;
-        _state_manager.begin_sequence(_current_sequence);
+        _state_manager->begin_sequence(_current_sequence);
 
         //  Create module and link library into it
         auto module = std::make_unique<llvm::Module>("graph_execution_context.dsp." + std::to_string(_current_sequence), _llvm_context);
@@ -117,7 +65,7 @@ namespace DSPJIT {
                 *module);
 
         auto initialize_functions =
-            _state_manager.finish_sequence(*_execution_engine, *module);
+            _state_manager->finish_sequence(*_execution_engine, *module);
 
         if (_ir_dump) {
             LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
@@ -163,15 +111,6 @@ namespace DSPJIT {
         _ir_dump = true;
     }
 
-    const uint8_t *graph_execution_context::get_native_code(std::size_t& size)
-    {
-        if (_last_native_code_object_data != nullptr)
-            size = _last_native_code_object_size;
-        else
-            size = 0u;
-        return _last_native_code_object_data;
-    }
-
     void graph_execution_context::set_global_constant(const std::string& name, float value)
     {
         _library->getOrInsertGlobal(name, llvm::Type::getFloatTy(_llvm_context));
@@ -188,7 +127,7 @@ namespace DSPJIT {
         if (!node.use_static_memory)
             throw std::invalid_argument("graph_execution_context: this node does not use static memory");
 
-        _state_manager.register_static_memory_chunk(node, std::move(data));
+        _state_manager->register_static_memory_chunk(node, std::move(data));
     }
 
     void graph_execution_context::free_static_memory_chunk(const compile_node_class& node)
@@ -196,7 +135,7 @@ namespace DSPJIT {
         if (!node.use_static_memory)
             throw std::invalid_argument("graph_execution_context: this node does not use static memory");
 
-        _state_manager.free_static_memory_chunk(node);
+        _state_manager->free_static_memory_chunk(node);
     }
 
     bool graph_execution_context::update_program() noexcept
@@ -252,7 +191,7 @@ namespace DSPJIT {
         auto outputs_array_value = arg_begin++;
 
         //  Create graph compiler
-        graph_compiler compiler{builder, instance_num_value, _state_manager};
+        graph_compiler compiler{builder, instance_num_value, *_state_manager};
 
         //  generate code that load inputs from input array and
         //  register input_nodes output as value.
@@ -320,9 +259,6 @@ namespace DSPJIT {
         llvm::Function *process_func,
         initialize_functions initialize_funcs)
     {
-        // Set a datalayout matching the execution engine
-        //graph_module->setDataLayout(_execution_engine->getDataLayout());
-
         //  Check generated IR code
         std::string error_string;
         if (ir_helper::check_module(*graph_module, error_string)) {
@@ -332,23 +268,16 @@ namespace DSPJIT {
         }
 
         //  Compile module to native code
-        _execution_engine->addModule(std::move(graph_module));
-        _execution_engine->finalizeObject();
-
-        if (_execution_engine->hasError()) {
-            LOG_ERROR("[graph_execution_context][compile thread] Execution engine encountered an error while generation native code : %s\n",
-                _execution_engine->getErrorMessage().c_str());
-            _execution_engine->clearErrorMessage();
-            throw std::runtime_error("[graph_execution_context][compile thread] Error while generating native code");
-        }
+        _execution_engine->add_module(std::move(graph_module));
+        _execution_engine->emit_native_code();
 
         // Retrieve pointers to generated native code
         auto process_func_pointer =
-            reinterpret_cast<native_process_func>(_execution_engine->getPointerToFunction(process_func));
+            reinterpret_cast<native_process_func>(_execution_engine->get_function_pointer(process_func));
         auto initialize_func_pointer =
-            reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_funcs.initialize));
+            reinterpret_cast<native_initialize_func>(_execution_engine->get_function_pointer(initialize_funcs.initialize));
         auto initialize_new_node_func_pointer =
-            reinterpret_cast<native_initialize_func>(_execution_engine->getPointerToFunction(initialize_funcs.initialize_new_nodes));
+            reinterpret_cast<native_initialize_func>(_execution_engine->get_function_pointer(initialize_funcs.initialize_new_nodes));
 
         //  Initialize every instances for new nodes as there could be running instances now
         for (auto i = 0u; i < _instance_count; i++)
@@ -378,6 +307,6 @@ namespace DSPJIT {
     void graph_execution_context::_process_ack_msg(const ack_msg msg)
     {
         LOG_DEBUG("[graph_execution_context][compile thread] received acknowledgment from process thread (seq = %u)\n", msg);
-        _state_manager.using_sequence(msg);
+        _state_manager->using_sequence(msg);
     }
 }

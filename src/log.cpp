@@ -16,7 +16,7 @@ namespace DSPJIT {
         va_list args;
         va_start(args, fmt);
 
-#ifdef WIN32
+#if defined(WIN32) && !defined(NDEBUG)
         char buffer[512];
         vsnprintf(buffer, sizeof(buffer), fmt, args);
         OutputDebugString(buffer);

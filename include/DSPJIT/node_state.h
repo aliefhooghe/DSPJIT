@@ -20,7 +20,7 @@ namespace DSPJIT
             std::size_t output_count);
 
         node_state(const node_state&) = delete;
-        node_state(node_state&&) = default;
+        node_state(node_state&&) noexcept = default;
 
         llvm::Value *get_cycle_state_ptr(
             llvm::IRBuilder<>& builder,
@@ -35,7 +35,7 @@ namespace DSPJIT
         void _update_output_count(std::size_t output_count);
 
         graph_memory_manager& _manager;
-        std::vector<float> _cycle_state;
+        std::vector<float> _cycle_state{};
         std::vector<uint8_t> _data{};
         std::size_t _node_output_count;
         std::size_t _instance_count;

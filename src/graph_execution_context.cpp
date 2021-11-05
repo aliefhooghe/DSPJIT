@@ -108,7 +108,7 @@ namespace DSPJIT {
 
     void graph_execution_context::enable_ir_dump(bool enable)
     {
-        _ir_dump = true;
+        _ir_dump = enable;
     }
 
     void graph_execution_context::set_global_constant(const std::string& name, float value)

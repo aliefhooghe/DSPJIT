@@ -8,37 +8,24 @@
 #include <DSPJIT/log.h>
 #include <DSPJIT/ir_helper.h>
 
-#ifdef WIN32
-#include <Windows.h>
-#endif
+namespace DSPJIT {
 
-
-namespace ir_helper {
-
-    void print_module(const llvm::Module& module)
+    void log_module(const llvm::Module& module)
     {
-#ifdef WIN32
         std::stringstream sstream{};
-        llvm::raw_os_ostream stream{sstream};
+        llvm::raw_os_ostream stream{ sstream };
         module.print(stream, nullptr);
-        OutputDebugString(sstream.str().c_str());
-#else
-        llvm::raw_os_ostream stream{std::cout};
-        module.print(stream, nullptr);
-#endif
+        stream.flush();
+        DSPJIT::log_function("%s", sstream.str().c_str());
     }
 
-    void print_function(const llvm::Function& function)
+    void log_function(const llvm::Function& function)
     {
-#ifdef WIN32
         std::stringstream sstream{};
         llvm::raw_os_ostream stream{sstream};
         function.print(stream);
-        OutputDebugString(sstream.str().c_str());
-#else
-        llvm::raw_os_ostream stream{std::cout};
-        function.print(stream);
-#endif
+        stream.flush();
+        DSPJIT::log_function("%s", sstream.str().c_str());
     }
 
     bool check_module(const llvm::Module& module, std::string& error_string)

@@ -69,9 +69,9 @@ namespace DSPJIT {
 
         if (_ir_dump) {
             LOG_INFO("[graph_execution_context][compile thread] IR code before optimization\n");
-            ir_helper::print_function(*process_function);
-            ir_helper::print_function(*initialize_functions.initialize);
-            ir_helper::print_function(*initialize_functions.initialize_new_nodes);
+            log_function(*process_function);
+            log_function(*initialize_functions.initialize);
+            log_function(*initialize_functions.initialize_new_nodes);
         }
 
         // Make all functions internal except the three that will be directly called
@@ -93,9 +93,9 @@ namespace DSPJIT {
 
         if (_ir_dump) {
             LOG_INFO("[graph_execution_context][compile thread] IR code after optimization\n");
-            ir_helper::print_function(*process_function);
-            ir_helper::print_function(*initialize_functions.initialize);
-            ir_helper::print_function(*initialize_functions.initialize_new_nodes);
+            log_function(*process_function);
+            log_function(*initialize_functions.initialize);
+            log_function(*initialize_functions.initialize_new_nodes);
         }
 
         //  Compile LLVM IR to native code
@@ -261,7 +261,7 @@ namespace DSPJIT {
     {
         //  Check generated IR code
         std::string error_string;
-        if (ir_helper::check_module(*graph_module, error_string)) {
+        if (check_module(*graph_module, error_string)) {
             //  Do not compile to native code because malformed code could lead to crash
             //  Stay at last process_func.
             throw std::runtime_error("[graph_execution_context][Compile Thread] Malformed IR code was detected in graph module: " + error_string);

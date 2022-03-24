@@ -49,7 +49,7 @@ namespace DSPJIT
         else {
             return
                 builder.CreateGEP(
-                    builder.getFloatTy(),
+                    builder.getInt8Ty(),
                     builder.CreateIntToPtr(
                         llvm::ConstantInt::get(
                             builder.getIntNTy(sizeof(uint8_t*) * 8),

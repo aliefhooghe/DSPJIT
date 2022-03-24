@@ -221,8 +221,8 @@ namespace DSPJIT {
 
             for (auto i = 0u; i < output_count; ++i) {
                 auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, input_index));
-                auto input_ptr = builder.CreateGEP(input_array, index_value);
-                input_values[i] = builder.CreateLoad(input_ptr);
+                auto input_ptr = builder.CreateGEP(builder.getFloatTy(), input_array, index_value);
+                input_values[i] = builder.CreateLoad(builder.getFloatTy(), input_ptr);
                 input_index++;
             }
 
@@ -247,7 +247,7 @@ namespace DSPJIT {
                 const auto dependency_node = output_node.get().get_input(i, output_id);
                 auto value = compiler.node_value(dependency_node, output_id);
                 auto index_value = llvm::ConstantInt::get(_llvm_context, llvm::APInt(64, output_index));
-                auto output_ptr = builder.CreateGEP(output_array, index_value);
+                auto output_ptr = builder.CreateGEP(builder.getFloatTy(), output_array, index_value);
                 builder.CreateStore(value, output_ptr);
                 output_index++;
             }

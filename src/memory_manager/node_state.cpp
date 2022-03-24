@@ -30,6 +30,7 @@ namespace DSPJIT
         _manager._declare_used_cycle_state(this, output_id);
         return
             builder.CreateGEP(
+                builder.getFloatTy(),
                 builder.CreateIntToPtr(
                     llvm::ConstantInt::get(
                         builder.getIntNTy(sizeof(float*) * 8),
@@ -48,6 +49,7 @@ namespace DSPJIT
         else {
             return
                 builder.CreateGEP(
+                    builder.getFloatTy(),
                     builder.CreateIntToPtr(
                         llvm::ConstantInt::get(
                             builder.getIntNTy(sizeof(uint8_t*) * 8),

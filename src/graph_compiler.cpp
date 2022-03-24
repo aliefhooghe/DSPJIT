@@ -129,7 +129,7 @@ namespace DSPJIT {
 
                         //  Store temporarily the cycle state value as output value.
                         //  It will be replaced when this node will be compiled
-                        const auto cycle_value = _builder.CreateLoad(cycle_ptr);
+                        const auto cycle_value = _builder.CreateLoad(_builder.getFloatTy(), cycle_ptr);
                         input_values_it->second[out_id] = cycle_value;
                         input_values[i] = cycle_value;
                     }

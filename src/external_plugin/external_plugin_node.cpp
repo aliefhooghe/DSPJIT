@@ -158,7 +158,7 @@ namespace DSPJIT {
         if (type != compute_type::PUSH) {
             std::vector<llvm::Value*> output_values{output_count};
             for (auto i = 0u; i < output_count; ++i)
-                output_values[i] = builder.CreateLoad(outputs_ptr[i]);
+                output_values[i] = builder.CreateLoad(builder.getFloatTy(), outputs_ptr[i]);
             return output_values;
         }
         else {

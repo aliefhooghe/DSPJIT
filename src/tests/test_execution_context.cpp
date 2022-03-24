@@ -254,7 +254,7 @@ public:
         auto &builder = compiler.builder();
         auto float_ptr = builder.CreateBitCast(
             static_memory, llvm::Type::getFloatPtrTy(builder.getContext()));
-        return { builder.CreateLoad(float_ptr) };
+        return { builder.CreateLoad(builder.getFloatTy(), float_ptr) };
     }
 };
 

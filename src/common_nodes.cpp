@@ -31,7 +31,7 @@ namespace DSPJIT {
             llvm::ConstantInt::get(builder.getIntNTy(sizeof(float*)*8), reinterpret_cast<intptr_t>(_ref)),
             llvm::Type::getFloatPtrTy(builder.getContext()));
 
-        return {builder.CreateLoad(ptr)};
+        return {builder.CreateLoad(builder.getFloatTy(), ptr)};
     }
 
     // Reference multiply node
@@ -45,7 +45,7 @@ namespace DSPJIT {
             llvm::ConstantInt::get(builder.getIntNTy(sizeof(float*)*8), reinterpret_cast<intptr_t>(_ref)),
             llvm::Type::getFloatPtrTy(builder.getContext()));
 
-        return {builder.CreateFMul(builder.CreateLoad(ptr), inputs[0])};
+        return {builder.CreateFMul(builder.CreateLoad(builder.getFloatTy(), ptr), inputs[0])};
     }
 
     // Add
@@ -95,7 +95,7 @@ namespace DSPJIT {
     {
         auto& builder = compiler.builder();
         auto state_ptr = builder.CreateBitCast(mutable_state, llvm::Type::getFloatPtrTy(builder.getContext()));
-        return {builder.CreateLoad(state_ptr)};
+        return {builder.CreateLoad(builder.getFloatTy(), state_ptr)};
     }
 
     void last_node::push_input(

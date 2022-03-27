@@ -11,8 +11,8 @@
 namespace DSPJIT {
 
 
-	void log_function(const char* fmt, ...)
-	{
+    void log_function(const char* fmt, ...)
+    {
         va_list args;
         va_start(args, fmt);
 
@@ -25,6 +25,6 @@ namespace DSPJIT {
 #endif
 
         va_end(args);
-	}
+    }
 
 }

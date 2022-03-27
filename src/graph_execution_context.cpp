@@ -120,6 +120,7 @@ namespace DSPJIT {
             throw std::runtime_error("Failed to create global constant variable");
 
         variable->setInitializer(llvm::ConstantFP::get(_llvm_context, llvm::APFloat{value}));
+        variable->setConstant(true);
     }
 
     void graph_execution_context::register_static_memory_chunk(const compile_node_class& node, std::vector<uint8_t>&& data)

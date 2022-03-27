@@ -17,12 +17,15 @@ namespace DSPJIT {
             _value(value)
         {}
 
+        float get_value() const noexcept { return _value; }
+        void set_value(float value) noexcept  { _value = value; }
+
         std::vector<llvm::Value*> emit_outputs(
                 graph_compiler& compiler,
                 const std::vector<llvm::Value*>& inputs,
                 llvm::Value*, llvm::Value*) const override;
     private:
-        const float _value;
+        float _value;
     };
 
     //  Reference node

@@ -223,9 +223,7 @@ namespace DSPJIT {
             _trash_static_memory_chunk(chunk_it);
             _static_memory.erase(chunk_it);
         }
-        else { // not an error
-            LOG_WARNING("[state_manager] free_static_memory_chunk : no chunk to free for node @%p\n", &node);
-        }
+        // else: not an error, the node could have been inserted but not compiled
     }
 
     llvm::Value *graph_memory_manager::get_static_memory_ref(llvm::IRBuilder<>& builder, const compile_node_class& node)
